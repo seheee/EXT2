@@ -13,31 +13,44 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 
 UINT32 get_free_inode_number(EXT2_FILESYSTEM* fs);
 
+// format
+/* 	
+	super block 초기화
+	group descriptor 초기화
+	block bitmap, inode bitmap, inode table 초기화
+	block group의 개수를 고려한 write 수행
+	root directory 생성 
+*/
 int ext2_format(DISK_OPERATIONS* disk)
 {
-	EXT2_SUPER_BLOCK sb;
-	EXT2_GROUP_DESCRIPTOR gd;
+	EXT2_SUPER_BLOCK sb; // super block
+	EXT2_GROUP_DESCRIPTOR gd; // group descriptor 2개
 	EXT2_GROUP_DESCRIPTOR  gd_another_group;
 
+	// 그룹 당 섹터개수(boot block때문에 디스크 전체 섹터에서 1빼줌)
 	QWORD sector_num_per_group = (disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
 	int i, gi, j;
-	const int BOOT_SECTOR_BASE = 1;
-	char sector[MAX_SECTOR_SIZE];
+	const int BOOT_SECTOR_BASE = 1; // boot block이 0, 그다음부터가 block group의 boot block
+	char sector[MAX_SECTOR_SIZE]; // 섹터버퍼
 
+	// super block 채우기
 	if (fill_super_block(&sb, disk->numberOfSectors, disk->bytesPerSector) != EXT2_SUCCESS)
 		return EXT2_ERROR;
 
 	ZeroMemory(sector, sizeof(sector));
-	memcpy(sector, &sb, sizeof(sb));
-	disk->write_sector(disk, BOOT_SECTOR_BASE + 0, sector);
+	memcpy(sector, &sb, sizeof(sb)); // 섹터버퍼에 superblock내용 가져와서
+	disk->write_sector(disk, BOOT_SECTOR_BASE + 0, sector); // 디스크에 write
 
+	// group descriptor 채우기
 	if (fill_descriptor_block(&gd, &sb, disk->numberOfSectors, disk->bytesPerSector) != EXT2_SUCCESS)
 		return EXT2_ERROR;
 
+	// 다음 group descriptor에 대입
 	gd_another_group = gd;
 	gd_another_group.free_inodes_count = NUMBER_OF_INODES / NUMBER_OF_GROUPS;
 	gd_another_group.free_blocks_count = sb.free_block_count / NUMBER_OF_GROUPS;
 
+	// 섹터버퍼에 group descriptor들 넣기(group descriptor table)
 	ZeroMemory(sector, sizeof(sector));
 	for (j = 0; j < NUMBER_OF_GROUPS; j++)
 	{
@@ -45,9 +58,11 @@ int ext2_format(DISK_OPERATIONS* disk)
 		else memcpy(sector + j * sizeof(gd_another_group), &gd_another_group, sizeof(gd_another_group));
 	}
 
+	// 디스크에 write
 	disk->write_sector(disk, BOOT_SECTOR_BASE + 1, sector);
 
 	// block bitmap
+	// 일단 전부 0으로 setting하고 메타데이터에 해당하는 17개 블록 (17bit)를 1로 setting
 	ZeroMemory(sector, sizeof(sector));
 
 	sector[0] = 0xff;
@@ -56,6 +71,7 @@ int ext2_format(DISK_OPERATIONS* disk)
 	disk->write_sector(disk, BOOT_SECTOR_BASE + 2, sector);
 
 	// inode bitmap
+	// 일단 전부 0으로 setting하고 예약된 부분(10번까지, 10bit)을 1로 세팅
 	ZeroMemory(sector, sizeof(sector));
 
 	sector[0] = 0xff;
@@ -68,20 +84,25 @@ int ext2_format(DISK_OPERATIONS* disk)
 	for (i = 4; i < sb.first_data_block_each_group; i++)
 		disk->write_sector(disk, BOOT_SECTOR_BASE + i, sector);
 
+	// block group 2
 	for (gi = 1; gi < NUMBER_OF_GROUPS; gi++)
 	{
-		sb.block_group_number = gi;
+		sb.block_group_number = gi; // super block의 block group number가 달라짐
 
 		ZeroMemory(sector, sizeof(sector));
 		memcpy(sector, &sb, sizeof(sb));
 
+		// 해당 순서의 block group위치에 super block 써줌
 		disk->write_sector(disk, sector_num_per_group * gi + BOOT_SECTOR_BASE, sector);
 
+		// 섹터버퍼에 group descriptor들 넣기(group descriptor table)
 		ZeroMemory(sector, sizeof(sector));
 		for (j = 0; j < NUMBER_OF_GROUPS; j++)
 		{
 			memcpy(sector + j * sizeof(gd), &gd, sizeof(gd));
 		}
+
+		// 해당 순서의 block group위치 + 1(super block만큼)에 write
 		disk->write_sector(disk, sector_num_per_group * gi + BOOT_SECTOR_BASE + 1, sector);
 
 		// block bitmap
@@ -91,7 +112,8 @@ int ext2_format(DISK_OPERATIONS* disk)
 		sector[2] = 0x01;
 		disk->write_sector(disk, sector_num_per_group * gi + BOOT_SECTOR_BASE + 2, sector);
 
-		//inode bitmap
+		// inode bitmap
+		// 0번째 inode bitmap에서는 예약된 inode가 10번까지 있었지만, 이외의 block group에서는 예약된 inode가 없어서 모두 0으로 초기화
 		ZeroMemory(sector, sizeof(sector));
 
 		disk->write_sector(disk, sector_num_per_group * gi + BOOT_SECTOR_BASE + 3, sector);
@@ -110,11 +132,58 @@ int ext2_format(DISK_OPERATIONS* disk)
 	PRINTF("sector byte size               : %u\n", MAX_SECTOR_SIZE);
 	PRINTF("\n");
 
+	// root directory 생성
 	create_root(disk, &sb);
 
 	return EXT2_SUCCESS;
 }
 
+// Super Block 
+int write_super_block(EXT2_SUPER_BLOCK *sb, DISK_OPERATIONS *disk)
+{
+	QWORD sector_num_per_group = (disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
+	char sector[MAX_SECTOR_SIZE];
+	const int BOOT_SECTOR_BASE = 1;
+	
+	// 디스크에 write
+	for (int gi = 0; gi < NUMBER_OF_GROUPS; gi++)
+	{
+		sb->block_group_number = gi; // super block의 block group number가 달라짐
+		sb->first_data_block_each_group = gi*sector_num_per_group + 17;
+
+		ZeroMemory(sector, sizeof(sector));
+		memcpy(sector, &sb, sizeof(sb));
+
+		// 해당 순서의 block group위치에 super block 써줌
+		disk->write_sector(disk, sector_num_per_group * gi + BOOT_SECTOR_BASE, sector);
+	}
+
+	return EXT2_SUCCESS;
+}
+
+// Group Descriptor
+int write_group_descriptor(DISK_OPERATIONS* disk, EXT2_GROUP_DESCRIPTOR* gd, int groupNum)
+{
+	char sector[MAX_SECTOR_SIZE];
+	const int BOOT_SECTOR_BASE = 1;
+	QWORD sector_num_per_group = (disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
+
+	// 기존의 group descriptor table 읽어와서
+	disk->read_sector(disk, BOOT_SECTOR_BASE+1, sector);
+
+	// 전달받은 group descriptor부분만 수정
+	memcpy(sector + groupNum * sizeof(gd), &gd, sizeof(gd));
+
+	// disk write
+	for (int gi = 0; gi < NUMBER_OF_GROUPS; gi++)
+	{
+		disk->write_sector(disk, sector_num_per_group * gi + BOOT_SECTOR_BASE + 1, sector);
+	}
+
+	return EXT2_SUCCESS;
+}
+
+// fill_super_block(&sb, disk->numberOfSectors, disk->bytesPerSector
 int fill_super_block(EXT2_SUPER_BLOCK * sb, SECTOR numberOfSectors, UINT32 bytesPerSector)
 {
 	ZeroMemory(sb, sizeof(EXT2_SUPER_BLOCK));
@@ -122,7 +191,8 @@ int fill_super_block(EXT2_SUPER_BLOCK * sb, SECTOR numberOfSectors, UINT32 bytes
 	sb->max_inode_count = NUMBER_OF_INODES;
 	sb->block_count = numberOfSectors;
 	sb->reserved_block_count = 0;
-	sb->free_block_count = numberOfSectors - (17 * NUMBER_OF_GROUPS) - 1;
+	// 전체sector에서 boot sector 1빼고 17(super block 1 + group descriptor 1 + bitmap 1 + 1 + inode table 13)*2뺌
+	sb->free_block_count = numberOfSectors - (17 * NUMBER_OF_GROUPS) - 1; 
 	sb->free_inode_count = NUMBER_OF_INODES - 10;
 	sb->first_data_block = 1;
 	sb->log_block_size = 0;
@@ -139,7 +209,7 @@ int fill_super_block(EXT2_SUPER_BLOCK * sb, SECTOR numberOfSectors, UINT32 bytes
 
 	return EXT2_SUCCESS;
 }
-
+                             
 int fill_descriptor_block(EXT2_GROUP_DESCRIPTOR * gd, EXT2_SUPER_BLOCK * sb, SECTOR numberOfSectors, UINT32 bytesPerSector)
 {
 	ZeroMemory(gd, sizeof(EXT2_GROUP_DESCRIPTOR));
@@ -147,15 +217,21 @@ int fill_descriptor_block(EXT2_GROUP_DESCRIPTOR * gd, EXT2_SUPER_BLOCK * sb, SEC
 	gd->start_block_of_block_bitmap = 2;
 	gd->start_block_of_inode_bitmap = 3;
 	gd->start_block_of_inode_table = 4;
+	// group개수로 나누고, 나머지까지 더해줌
 	gd->free_blocks_count = (UINT16)(sb->free_block_count / NUMBER_OF_GROUPS + sb->free_block_count % NUMBER_OF_GROUPS);
-	gd->free_inodes_count = (UINT16)(((sb->free_inode_count) + 10) / NUMBER_OF_GROUPS - 10);
+	gd->free_inodes_count = (UINT16)(((sb->free_inode_count) + 10) / NUMBER_OF_GROUPS - 10); //??
 	gd->directories_count = 0;
 
 	return EXT2_SUCCESS;
 }
 
+// root directory 생성 
 int create_root(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK * sb)
-{}
+{
+
+
+
+}
 
 void process_meta_data_for_inode_used(EXT2_NODE * retEntry, UINT32 inode_num, int fileType)
 {
