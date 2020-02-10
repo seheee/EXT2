@@ -336,6 +336,20 @@ str++;
 
 int format_name(EXT2_FILESYSTEM* fs, char* name)
 {
+	INT32 length = strlen(name);
+	if(length > 255)
+	{
+		return EXT2_ERROR;
+	}
+	for(int i = 0; i < length; i++)
+	{
+		if(name[i] == '\0' || name[i] == '/')
+		{
+			return EXT2_ERROR;
+		}
+	}
+
+	upper_string( name, length );
 }
 
 int lookup_entry(EXT2_FILESYSTEM* fs, const int inode, const char* name, EXT2_NODE* retEntry)
@@ -396,6 +410,26 @@ int ext2_read_superblock(EXT2_FILESYSTEM* fs, EXT2_NODE* root)
 
 UINT32 get_free_inode_number(EXT2_FILESYSTEM* fs)
 {
+	int cnt = 0;
+
+	char sector[MAX_SECTOR_SIZE];
+	
+	for(int k = 0; k < NUMBER_OF_GROUPS; k++)
+	{
+		fs->disk->read_sector(fs->disk, fs->gd.start_block_of_inode_bitmap + (k*fs->sb.block_per_group), sector);
+		for(int i = 0; i < MAX_SECTOR_SIZE; i++)
+		{
+			for(int j = 0; j < 8; j++)
+			{
+				cnt++;
+				if(!((unsigned char)sector[i] >> j)^0)
+				{
+					return cnt;
+				}			
+			}
+		}
+	}
+	
 }
 
 int set_inode_onto_inode_table(EXT2_FILESYSTEM *fs, const UINT32 which_inode_num_to_write, INODE * inode_to_write)
@@ -416,10 +450,10 @@ int read_dir_from_sector(EXT2_FILESYSTEM* fs, BYTE* sector, EXT2_NODE_ADD adder,
 
 char* my_strncpy(char* dest, const char* src, int length)
 {
-while (*src && *src != 0x20 && length-- > 0)
-*dest++ = *src++;
+	while (*src && *src != 0x20 && length-- > 0)
+	*dest++ = *src++;
 
-return dest;
+	return dest;
 }
 
 int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEntry)
