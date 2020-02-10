@@ -49,25 +49,25 @@
 
 typedef struct
 {
-	UINT32 max_inode_count;
-	UINT32 block_count;
-	UINT32 reserved_block_count;
-	UINT32 free_block_count;
-	UINT32 free_inode_count;
+	UINT32 max_inode_count; // 파일시스템에서 사용가능한 최대 inode개수
+	UINT32 block_count; // 파일시스템 내 전체 블록의 개수
+	UINT32 reserved_block_count; // block count의 5%값, 아무대책없이 파일시스템이 꽉차는 경우를 막기위해 존재
+	UINT32 free_block_count; // 사용되지 않는 블록의 개수
+	UINT32 free_inode_count; // 사용되지 않는 inode 개수
 
-	UINT32 first_data_block;
-	UINT32 log_block_size;
-	UINT32 log_fragmentation_size;
-	UINT32 block_per_group;
-	UINT32 fragmentation_per_group;
-	UINT32 inode_per_group;
-	UINT16 magic_signature;
-	UINT16 errors;
-	UINT32 first_non_reserved_inode;
-	UINT16 inode_structure_size;
+	UINT32 first_data_block; // 첫번째 블록(블록그룹 0이 시작되는 블록)
+	UINT32 log_block_size; // 블록의 크기(0은 1KB, 1은 2KB, 2는 4KB)
+	UINT32 log_fragmentation_size; // 단편화 발생 시 기록되는 크기(0,1,2로 표현)
+	UINT32 block_per_group; // 각 블록 그룹에 속한 블록의 개수
+	UINT32 fragmentation_per_group; // 각 블록 그룹에 속한 단편화된 개수
+	UINT32 inode_per_group; // 각 블록 그룹에 속한 inode개수
+	UINT16 magic_signature; // super block인지를 확인하는 고유값
+	UINT16 errors; // 에러처리를 위한 flag
+	UINT32 first_non_reserved_inode; // 예약되지 않은 inode의 첫번째 인덱스(10개의 inode가 예약되어있음)
+	UINT16 inode_structure_size; // inode구조체의 크기(128byte)
 
-	UINT16 block_group_number;
-	UINT32 first_data_block_each_group;
+	UINT16 block_group_number; // 현재 super block을 포함하고있는 block group의 번호
+	UINT32 first_data_block_each_group; //그룹에 따른 첫번째 데이터 블록 번호
 } EXT2_SUPER_BLOCK;
 
 typedef struct
@@ -94,12 +94,12 @@ typedef struct
 
 typedef struct
 {
-	UINT32 start_block_of_block_bitmap;
-	UINT32 start_block_of_inode_bitmap;
-	UINT32 start_block_of_inode_table;
-	UINT32 free_blocks_count;
-	UINT32 free_inodes_count;
-	UINT16 directories_count;
+	UINT32 start_block_of_block_bitmap; // block bitmap의 블록 번호
+	UINT32 start_block_of_inode_bitmap; // inode bitmap의 블록 번호
+	UINT32 start_block_of_inode_table; // inode table의 블록 번호
+	UINT32 free_blocks_count; // 해당 블록 그룹 내의 비어있는 블록 수
+	UINT32 free_inodes_count; // 해당 블록 그룹 내의 비어있는 inode 수
+	UINT16 directories_count; // 해당 블록 그룹 내의 생성된 디렉터리 수
 	BYTE padding[2];
 	BYTE reserved[12];
 } EXT2_GROUP_DESCRIPTOR;
