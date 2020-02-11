@@ -303,6 +303,7 @@ int create_root(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK * sb)
 	return EXT2_SUCCESS ;
 }
 
+// inode 변경사항이 있을 때 meta data수정
 void process_meta_data_for_inode_used(EXT2_NODE * retEntry, UINT32 inode_num, int fileType)
 {
 }
@@ -314,11 +315,13 @@ int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry, int fileType)
 UINT32 get_available_data_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 {
 }
-
+ 
+// data block
 void process_meta_data_for_block_used(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 {
 }
 
+// 파일 크기가 커질때 block 더 할당
 UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 {    
 
@@ -327,6 +330,7 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 
 }
 
+// 
 int meta_read(EXT2_FILESYSTEM * fs, SECTOR group, SECTOR block, BYTE* sector)
 {    
      
@@ -406,6 +410,7 @@ int lookup_entry(EXT2_FILESYSTEM* fs, const int inode, const char* name, EXT2_NO
 
 int find_entry_at_sector(const BYTE* sector, const BYTE* formattedName, UINT32 begin, UINT32 last, UINT32* number)
 {    
+
 }
 
 int find_entry_on_root(EXT2_FILESYSTEM* fs, INODE inode, char* formattedName, EXT2_NODE* ret)
@@ -535,6 +540,16 @@ int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
 
 int read_root_sector(EXT2_FILESYSTEM* fs, BYTE* sector)
 {    
+	INODE * inodeBuffer ;
+    int * root ;
+	get_inode(fs,2,inodeBuffer);
+  	root=	get_data_block_at_inode(fs,inodeBuffer);
+
+	data_read(fs, 0, root[0], sector);
+
+	return EXT2_SUCCESS;
+
+     
 }
 
 int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry)
@@ -542,23 +557,29 @@ int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry)
 }
 
 
-int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode, UINT32 number)
+int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
 {    
 	int* blockNumber;
 	char sector1[MAX_SECTOR_SIZE];
 	char sector2[MAX_SECTOR_SIZE];
 	char sector3[MAX_SECTOR_SIZE];
 
-	int* pointer;
-	pointer = (int*)sector1;
+	char sector4[MAX_SECTOR_SIZE];
 
+	int* pointer1, pointer2, pointer3;
+	pointer1 = (int*)sector1;
+	pointer2 = (int*)sector2;
+	pointer3 = (int*)sector3;
+    pointer4= (int *)sector4;
+    
 	if(number <0 || number>NUMBER_OF_INODES)
-      	return EXT2_ERROR;	
+      	return EXT2_ERROR;
+    	
 
-    get_inode(fs,number,&inode);
-	
+	if(inode.blocks==0)
+	return EXT2_ERROR;
 	blockNumber = (int*)malloc(sizeof(int)*inode.blocks);
-
+    
 	if(inode.blocks > 11)
 	{
 		fs->disk->read_sector(fs->disk, inode.block[12], sector1);
@@ -575,14 +596,20 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode, UINT32 number)
 	for(int i = 0; i < inode.blocks; i++)
 	{
 		// single indirect
-		if(i > 11 && i < 267)
+		if(i > 11 && i < 268)
 		{
-			blockNumber[i] = pointer[i-11];
+			blockNumber[i] = pointer1[i-12];
 		}
 		// double indirect
-		else if(i > 267 && i < (256*256+11))
+		else if(i > 267 && i < (256*256+12))
 		{
-			if()
+			if(i % 256 == 12)
+			{
+				ZeroMemory(sector4, sizeof(sector4));
+				fs->disk->read_sector(fs->disk, pointer2[(i-12)/257],sector4);
+			}
+
+			blockNumber[i] = pointer4[(i-12)%256];
 		}
 		// triple indirect
 		else if(i > (256*256+11))
@@ -596,12 +623,8 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode, UINT32 number)
 		}
 		
 	}
-	if(inode.block[0]>0)
-	{
-        blockNumber= inode.block[0];
 		return blockNumber;
-	} 
-	return EXT2_ERROR;
+	 
 
 }
 // 슈퍼블록하고 그룹디스크립터의 섹터들을 읽어와서 연결된 구조체에 연결한다 
