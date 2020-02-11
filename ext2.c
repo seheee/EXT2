@@ -239,18 +239,31 @@ int fill_descriptor_block(EXT2_GROUP_DESCRIPTOR * gd, EXT2_SUPER_BLOCK * sb, SEC
 // root directory 생성 
 int create_root(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK * sb)
 {
-
+    EXT2_NODE dotNode, dotdotNode ;
 	EXT2_DIR_ENTRY * entry ;
 	BYTE sector[MAX_SECTOR_SIZE];
+	BYTE sector2[MAX_SECTOR_SIZE];
 	INODE *id;
+	INODE *id2;
 	EXT2_GROUP_DESCRIPTOR * gd;
 	SECTOR rootsector =0;
 	EXT2_SUPER_BLOCK * sb2;
 	ZeroMemory(sector,MAX_SECTOR_SIZE);
 	entry= (EXT2_DIR_ENTRY *)sector;
 	memcpy(entry->name,VOLUME_LABLE,13);
-	entry->name_len=VOLUME_LABLE;
+	entry->name_len=sizeof(VOLUME_LABLE);
 	entry->inode=2;
+    ZeroMemory(&dotNode, sizeof(EXT2_NODE));
+	memset(dotNode.entry.name,0x20,11);
+    dotNode.entry.name[0]=".";
+    dotNode.entry.inode=2;
+	insert_entry(2,dotNode,0x4000);
+	 ZeroMemory(&dotNode, sizeof(EXT2_NODE));
+	memset(dotNode.entry.name,0x20,11);
+    dotdotNode.entry.name[0]=".";
+	dotdotNode.entry.name[1]=".";
+    dotdotNode.entry.inode=2;
+	insert_entry(2,dotdotNode,0x4000);
 	entry++;
 	entry->name[0]= DIR_ENTRY_NO_MORE;
 	rootsector= 1+sb->first_data_block_each_group; // 부트 코드 땜에 1 더해줌
@@ -283,6 +296,10 @@ int create_root(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK * sb)
 	id->uid = 0;
 	id->block[0]= 1+sb->first_data_block_each_group ;
 	disk->write_sector(disk,5,sector);
+	
+	
+
+
 	return EXT2_SUCCESS ;
 }
 
@@ -311,7 +328,9 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 }
 
 int meta_read(EXT2_FILESYSTEM * fs, SECTOR group, SECTOR block, BYTE* sector)
-{
+{    
+     
+
 }
 int meta_write(EXT2_FILESYSTEM * fs, SECTOR group, SECTOR block, BYTE* sector)
 {
@@ -324,8 +343,9 @@ int data_read(EXT2_FILESYSTEM * fs, SECTOR group, SECTOR block, BYTE* sector)
   	// 몇번째 그룹의 몇번째 block을 읽는 함수 , 섹터 버퍼에다가 그내용을 저장한다     
     if(group<0 || group>NUMBER_OF_GROUPS)
      	return EXT2_ERROR; 
-	  
+
     blockLocation = group* sector_num_per_group + block;
+
     
 
    	fs->disk->read_sector(fs->disk,blockLocation   ,sector);
@@ -514,7 +534,7 @@ int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
 }
 
 int read_root_sector(EXT2_FILESYSTEM* fs, BYTE* sector)
-{  
+{    
 }
 
 int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry)
@@ -584,11 +604,14 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode, UINT32 number)
 	return EXT2_ERROR;
 
 }
+// 슈퍼블록하고 그룹디스크립터의 섹터들을 읽어와서 연결된 구조체에 연결한다 
 
 int ext2_read_superblock(EXT2_FILESYSTEM* fs, EXT2_NODE* root)
+
 {
 	char sector[MAX_SECTOR_SIZE];
 	fs->disk->read_sector(fs->disk, 1, )
+
 }
 
 UINT32 get_free_inode_number(EXT2_FILESYSTEM* fs)
@@ -659,11 +682,57 @@ int ext2_lookup(EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEntry)
 }
 
 int ext2_read_dir(EXT2_NODE* dir, EXT2_NODE_ADD adder, void* list)
-{
+{    // 디렉토리를 읽는 함수인데 루트 디렉토리의 엔트리들을 읽는 것과 다른 디렉토리를 읽는 것과 차이가 있다
+    BYTE sector[MAX_SECTOR_SIZE];
+	EXT2_DIR_ENTRY_LOCATION location ;
+	int entriesPerSector = (MAX_SECTOR_SIZE/sizeof(EXT2_DIR_ENTRY));
+	INODE* inodeBuffer; 
+	get_inode(dir->fs,dir->entry.inode,inodeBuffer);
+   if(dir->entry.inode==2)// 루트 디렉토리일경우 
+   {
+    read_root_sector(dir->fs,sector);
+	read_dir_from_sector(dir->fs,sector,adder,list);
+   }
+   else if (inodeBuffer->mode!=0x4000) // 디렉토리가 아닐경우 
+   {
+    return EXT2_ERROR;
+   }
+   else // 디렉토리일경우 
+   {
+    if(inodeBuffer->block[0]==0)  // 아무 것도 없을 경우 
+     return EXT2_ERROR ;
+    
+
+
+
+   }
+   return EXT2_SUCCESS ;
+
 }
 
 int read_dir_from_sector(EXT2_FILESYSTEM* fs, BYTE* sector, EXT2_NODE_ADD adder, void* list)
-{
+{     int  entriesPerSector;
+      EXT2_DIR_ENTRY * dir;
+	  EXT2_NODE node ;
+	  
+	  entriesPerSector = ( MAX_SECTOR_SIZE/sizeof(EXT2_DIR_ENTRY));
+	  for(int i=0; i<entriesPerSector ; i++)
+	  {
+
+       if(dir->name[0]== DIR_ENTRY_FREE)
+	    continue ;
+		else if(dir->name[0]==DIR_ENTRY_NO_MORE)
+		break;
+		else if(!(dir->inode ==2))
+     {
+     node.fs = fs;
+	 node.entry=*dir;
+    node.location.offset =i; 
+     adder(fs,list,&node);
+	 }
+          dir ++;
+	  }
+	  return EXT2_SUCCESS;	  
 }
 
 char* my_strncpy(char* dest, const char* src, int length)
