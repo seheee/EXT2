@@ -157,8 +157,7 @@ int write_super_block(EXT2_SUPER_BLOCK *sb, DISK_OPERATIONS *disk)
 	for (int gi = 0; gi < NUMBER_OF_GROUPS; gi++)
 	{
 		sb->block_group_number = gi; // super block의 block group number가 달라짐
-		//sb->first_data_block_each_group = gi*sector_num_per_group + 17;
-		// group끼리 block번호가 연속이 아닐경우에는 이 라인 지우기
+		sb->first_data_block_each_group = gi*sector_num_per_group + 17;
 
 		ZeroMemory(sector, sizeof(sector));
 		memcpy(sector, &sb, sizeof(sb));
@@ -223,6 +222,7 @@ int fill_super_block(EXT2_SUPER_BLOCK * sb, SECTOR numberOfSectors, UINT32 bytes
 int fill_descriptor_block(EXT2_GROUP_DESCRIPTOR * gd, EXT2_SUPER_BLOCK * sb, SECTOR numberOfSectors, UINT32 bytesPerSector)
 {
 	ZeroMemory(gd, sizeof(EXT2_GROUP_DESCRIPTOR));
+
 
 	gd->start_block_of_block_bitmap = 2;
 	gd->start_block_of_inode_bitmap = 3;
@@ -342,34 +342,33 @@ int meta_write(EXT2_FILESYSTEM * fs, SECTOR group, SECTOR block, BYTE* sector)
 
 int data_read(EXT2_FILESYSTEM * fs, SECTOR group, SECTOR block, BYTE* sector)
 {  
-  	int blockLocation ;
-  	QWORD sector_num_per_group = (fs->disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
-  	// 몇번째 그룹의 몇번째 block을 읽는 함수 , 섹터 버퍼에다가 그내용을 저장한다     
-    if(group<0 || group>NUMBER_OF_GROUPS)
-     	return EXT2_ERROR; 
-
-    blockLocation = group* sector_num_per_group + block;
-
+   int blockLocation ;
+   QWORD sector_num_per_group = (fs->disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
+  // 몇번째 그룹의 몇번째 block을 읽는 함수 , 섹터 버퍼에다가 그내용을 저장한다     
+      if(group<0 || group>NUMBER_OF_GROUPS)
+      return EXT2_ERROR; 
+	  
+    blockLocation = group* sector_num_per_group  + block;
     
 
-   	fs->disk->read_sector(fs->disk,blockLocation   ,sector);
+   fs->disk->read_sector(fs->disk,blockLocation   ,sector);
 
-   	return EXT2_SUCCESS ;
+   return EXT2_SUCCESS ;
 }
 int data_write(EXT2_FILESYSTEM * fs, SECTOR group, SECTOR block, BYTE* sector)
 {
-	int blockLocation ;
-   	QWORD sector_num_per_group = (fs->disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
-  	// 몇번째 그룹의 몇번째 block을 읽는 함수 , 섹터 버퍼에다가 그내용을 저장한다     
-    if(group<0 || group>NUMBER_OF_GROUPS)
-    	return EXT2_ERROR; 
+	  int blockLocation ;
+   QWORD sector_num_per_group = (fs->disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
+  // 몇번째 그룹의 몇번째 block을 읽는 함수 , 섹터 버퍼에다가 그내용을 저장한다     
+      if(group<0 || group>NUMBER_OF_GROUPS)
+      return EXT2_ERROR; 
 	  
-    blockLocation = group* sector_num_per_group + block;
+    blockLocation = group* sector_num_per_group +17 + block;
     
 
-   	fs->disk->write_sector(fs->disk,blockLocation   ,sector);
+   fs->disk->write_sector(fs->disk,blockLocation   ,sector);
 
-   	return EXT2_SUCCESS ;
+   return EXT2_SUCCESS ;
 }
 
 unsigned char toupper(unsigned char ch);
@@ -378,11 +377,11 @@ int isdigit(unsigned char ch);
 
 void upper_string(char* str, int length)
 {
-	while (*str && length-- > 0)
-	{
-		*str = toupper(*str);
-		str++;
-	}
+while (*str && length-- > 0)
+{
+*str = toupper(*str);
+str++;
+}
 }
 
 int format_name(EXT2_FILESYSTEM* fs, char* name)
@@ -432,6 +431,9 @@ int find_entry_at_sector(const BYTE* sector, const BYTE* formattedName, UINT32 b
 	entry = (EXT2_DIR_ENTRY*) sector;
 	int i;
 
+
+int find_entry_on_root(EXT2_FILESYSTEM* fs, INODE inode, char* formattedName, EXT2_NODE* ret)
+{   
 	for(i = begin; i <= last; i++)
 	{
 		// formattedName이 null
@@ -502,7 +504,7 @@ int find_entry_on_root(EXT2_FILESYSTEM* fs, INODE inode, char* formattedName, EX
 		ret->location.offset = number;
 	}
 
-	return EXT2_SUCCESS;
+
 }
 
 int find_entry_on_data(EXT2_FILESYSTEM* fs, INODE first, const BYTE* formattedName, EXT2_NODE* ret, UINT32 inode)
@@ -551,8 +553,7 @@ int find_entry_on_data(EXT2_FILESYSTEM* fs, INODE first, const BYTE* formattedNa
 
 		ZeroMemory(sector, sizeof(sector));
 	}
-	
-	
+
 }
 
 
@@ -560,11 +561,9 @@ int find_entry_on_data(EXT2_FILESYSTEM* fs, INODE first, const BYTE* formattedNa
 
 
 int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
-{    
-	EXT2_GROUP_DESCRIPTOR *gd2;
+{    EXT2_GROUP_DESCRIPTOR *gd2;
 	BYTE sector[MAX_SECTOR_SIZE];
 	ZeroMemory(sector,MAX_SECTOR_SIZE);
-	
 	fs->disk->read_sector(fs->disk, 2, sector) ;  
     gd2 = (EXT2_GROUP_DESCRIPTOR *) sector;
 	UINT32 inode_group = (inode-1)/fs->sb.inode_per_group; // 몇번째 inode group인지 
@@ -577,7 +576,6 @@ int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
 
 	UINT32 inode_offset = inode % (fs->sb.inode_per_group+1); // 그룹내의 inode table에서 몇번째인지 
 	UINT32 inode_sector = (inode_offset*inode_structure_size)/(MAX_SECTOR_SIZE);
-	
 	//해당 inode 블럭 
     ZeroMemory(sector,MAX_SECTOR_SIZE);
 	INODE* inode_table;
@@ -585,7 +583,7 @@ int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
 
 	fs->disk->read_sector(fs->disk, inode_start_block + inode_sector, sector);
 
-	inodeBuffer = &inode_table[inode_offset%9 - 1];
+	inodeBuffer = &inode_table[inode_offset%8];
 		
 	return EXT2_SUCCESS;
 }
@@ -608,7 +606,6 @@ int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry)
 {
 }
 
-
 int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
 {    
 	int* blockNumber;
@@ -622,7 +619,7 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
 	pointer1 = (int*)sector1;
 	pointer2 = (int*)sector2;
 	pointer3 = (int*)sector3;
-    pointer4= (int *)sector4;
+  pointer4= (int *)sector4;
    
     	
 
@@ -674,16 +671,17 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
 		
 	}
 		return blockNumber;
-	 
+
 
 }
 // 슈퍼블록하고 그룹디스크립터의 섹터들을 읽어와서 연결된 구조체에 연결한다 
 
 int ext2_read_superblock(EXT2_FILESYSTEM* fs, EXT2_NODE* root)
+{    
+   
 
-{
-	char sector[MAX_SECTOR_SIZE];
-	fs->disk->read_sector(fs->disk, 1, )
+
+      
 
 }
 
@@ -712,18 +710,14 @@ UINT32 get_free_inode_number(EXT2_FILESYSTEM* fs)
 }
 
 int set_inode_onto_inode_table(EXT2_FILESYSTEM *fs, const UINT32 which_inode_num_to_write, INODE * inode_to_write)
-{   
-	// inode 버퍼를 가지고 와서 inode번호를 쓴다 
-    if(which_inode_num_to_write<0|| which_inode_num_to_write>NUMBER_OF_INODES)
-	 	return EXT2_ERROR;
-	
-	EXT2_GROUP_DESCRIPTOR *gd2;
+{   // inode 버퍼를 가지고 와서 inode번호를 쓴다 
+     if(which_inode_num_to_write<0|| which_inode_num_to_write>NUMBER_OF_INODES)
+	 return EXT2_ERROR;
+	 EXT2_GROUP_DESCRIPTOR *gd2;
 	BYTE sector[MAX_SECTOR_SIZE];
-	
 	ZeroMemory(sector,MAX_SECTOR_SIZE);
 	fs->disk->read_sector(fs->disk, 2, sector) ;  
-    
-	gd2 = (EXT2_GROUP_DESCRIPTOR *) sector;
+    gd2 = (EXT2_GROUP_DESCRIPTOR *) sector;
 	UINT32 inode_group = (which_inode_num_to_write-1)/fs->sb.inode_per_group; // 몇번째 inode group인지 
 	for  ( int i=0 ; i<inode_group; i++)
 	  { gd2++ ;}  
@@ -734,19 +728,20 @@ int set_inode_onto_inode_table(EXT2_FILESYSTEM *fs, const UINT32 which_inode_num
 
 	UINT32 inode_offset = which_inode_num_to_write % (fs->sb.inode_per_group+1); // 그룹내의 inode table에서 몇번째인지 
 	UINT32 inode_sector = (inode_offset*inode_structure_size)/(MAX_SECTOR_SIZE);
-	
 	//해당 inode 블럭 
     ZeroMemory(sector,MAX_SECTOR_SIZE);
 	INODE* inode_table;
 	inode_table = (INODE*)sector;
 
 	fs->disk->read_sector(fs->disk, inode_start_block + inode_sector, sector);
-    
-	inode_table[inode_offset%9 - 1] = *inode_to_write ;             
-    
-	fs->disk->write_sector(fs->disk, inode_start_block+inode_sector,sector);
-	
+      inode_table[inode_offset%8] = *inode_to_write ;             
+     fs->disk->write_sector(fs->disk, inode_start_block+inode_sector,sector);
 	return EXT2_SUCCESS;
+
+
+
+
+
 
 }
 
