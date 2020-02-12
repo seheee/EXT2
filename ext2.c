@@ -1003,7 +1003,90 @@ char* my_strncpy(char* dest, const char* src, int length)
 
 	return dest;
 }
+int write_bitmap(int group , int number, int set, BYTE * sector)// 아이노드 비트맵을 쓸때는 number에다가 1빼주자 
+{
+    int offset = number / 8 ;
+	int offset2 = number %8 ;
+
+ if(set==0)
+   {  
+	   sector[offset]  &= (0x00<<(offset2));
+	   return EXT2_SUCCESS;
+   }
+   else if(set==1)
+{      sector[offset] |= 0x01<<(offset2) ;
+	 return EXT2_SUCCESS;
+}
+  else
+  {
+	 return EXT2_ERROR ;
+  }
+
+}
+
 
 int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEntry)
-{
+{  // parent node 를 가지고 
+EXT2_NODE  *dotNode;
+EXT2_NODE * dotdotNode ;
+int result ;
+INODE * inode;
+int inodenumber;
+BYTE sector[MAX_SECTOR_SIZE];
+QWORD sector_num_per_group = (parent->fs->disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
+ BYTE name[MAX_ENTRY_NAME_LENGTH];
+ strncpy(name,entryName,MAX_NAME_LENGTH);
+ int group ;
+ if(format_name(parent->fs,name))
+ return EXT2_ERROR;
+ ZeroMemory(retEntry,sizeof(EXT2_NODE)); 
+ 
+ memcpy(retEntry->entry.name,name,MAX_NAME_LENGTH); // 새로운 엔트리에 이름 넣어드림 
+ retEntry->fs=parent->fs;
+ insert_entry(parent,retEntry,0x4000);
+ //아이노드를 하나 만들어준다 
+  ZeroMemory(inode,sizeof(INODE));
+  inode->mode= 0x4000;
+  inode->blocks=1;
+  inodenumber = get_free_inode_number(parent->fs);
+  retEntry->entry.inode = inodenumber;
+  inode->block[0]= get_available_data_block(parent->fs,inodenumber);
+  if(set_inode_onto_inode_table(parent->fs,inodenumber,inode))
+  return EXT2_ERROR;      // 아이노드 채워줌 
+  parent->fs->sb.free_block_count --;
+  parent->fs->sb.free_inode_count --; // 슈퍼블록 내용 수정 
+  parent->fs->gd.free_blocks_count --;
+  parent->fs->gd.free_inodes_count --;
+  parent ->fs->gd.directories_count ++; // 디렉토리 늘었으니까 그룹 디스크립터 내용 수정 
+  group = inodenumber/(parent->fs->sb.inode_per_group);
+  // 블록 비트맵과 아이노드 비트맵 수정 
+  parent->fs->disk->read_sector(parent->fs,1+sector_num_per_group*group+2,sector);
+        write_bitmap(group,inode->block[0],1,sector);
+  parent->fs->disk->write_sector(parent->fs,1+sector_num_per_group*group+2,sector);
+   parent->fs->disk->read_sector(parent->fs,1+sector_num_per_group*group+3,sector);// 아이노드 비트맵 고치기
+        write_bitmap(group,inodenumber-1,1,sector);
+  parent->fs->disk->write_sector(parent->fs,1+sector_num_per_group*group+3,sector);
+ZeroMemory(dotNode,sizeof(EXT2_NODE));
+memset(dotNode->entry.name,0x20,MAX_ENTRY_NAME_LENGTH);
+dotNode->entry.name[0]="."; // 현재 디렉토리 
+dotNode->fs = parent->fs ;
+dotNode->entry=retEntry->entry;
+insert_entry(inodenumber,dotNode,0x4000);
+ZeroMemory(dotdotNode,sizeof(EXT2_NODE));
+memset(dotNode->entry.name,0x20,MAX_ENTRY_NAME_LENGTH);
+dotdotNode->entry.name[0]=".";  // 상위 디렉토리 
+dotdotNode->entry.name[1]=".";
+dotdotNode->fs = parent->fs ;
+dotdotNode->entry=parent->entry;
+insert_entry(inodenumber,dotNode,0x4000);
+
+
+    
+
+
+
+
+
+
+
 }
