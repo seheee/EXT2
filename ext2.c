@@ -6,7 +6,7 @@ typedef struct
 #include "ext2.h"
 #define MIN( a, b ) ( ( a ) < ( b ) ? ( a ) : ( b ) )
 #define MAX( a, b ) ( ( a ) > ( b ) ? ( a ) : ( b ) )
-
+int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode);
 int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, const char* buffer)
 {
 }
@@ -430,10 +430,7 @@ int find_entry_at_sector(const BYTE* sector, const BYTE* formattedName, UINT32 b
 	EXT2_DIR_ENTRY* entry;
 	entry = (EXT2_DIR_ENTRY*) sector;
 	int i;
-
-
-int find_entry_on_root(EXT2_FILESYSTEM* fs, INODE inode, char* formattedName, EXT2_NODE* ret)
-{   
+  
 	for(i = begin; i <= last; i++)
 	{
 		// formattedName이 null
@@ -502,6 +499,8 @@ int find_entry_on_root(EXT2_FILESYSTEM* fs, INODE inode, char* formattedName, EX
 		ret->location.block = 17;
 		ret->location.group = 0;
 		ret->location.offset = number;
+
+		return EXT2_SUCCESS;
 	}
 
 
@@ -512,7 +511,7 @@ int find_entry_on_data(EXT2_FILESYSTEM* fs, INODE first, const BYTE* formattedNa
 	char sector[MAX_SECTOR_SIZE];
 	EXT2_DIR_ENTRY* entry;
 	UINT32 number;
-	UINT32* blockNumArr;
+	int* blockNumArr;
 	int i, group;
 	group = inode / fs->sb.inode_per_group;
 
@@ -615,11 +614,14 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
 
 	char sector4[MAX_SECTOR_SIZE];
 
-	int* pointer1, pointer2, pointer3, pointer4;
+	int* pointer1;
+	int* pointer2;
+	int * pointer3;
+	int * pointer4;
 	pointer1 = (int*)sector1;
 	pointer2 = (int*)sector2;
 	pointer3 = (int*)sector3;
-  pointer4= (int *)sector4;
+ 	pointer4 = (int*)sector4;
    
     	
 
