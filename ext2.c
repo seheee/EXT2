@@ -147,7 +147,7 @@ int ext2_format(DISK_OPERATIONS* disk)
 }
 
 // Super Block 
-int write_super_block(EXT2_SUPER_BLOCK *sb, DISK_OPERATIONS *disk)
+/*int write_super_block(EXT2_SUPER_BLOCK *sb, DISK_OPERATIONS *disk)
 {
 	QWORD sector_num_per_group = (disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
 	char sector[MAX_SECTOR_SIZE];
@@ -167,10 +167,31 @@ int write_super_block(EXT2_SUPER_BLOCK *sb, DISK_OPERATIONS *disk)
 	}
 
 	return EXT2_SUCCESS;
+}*/
+int write_super_block(EXT2_SUPER_BLOCK *sb, DISK_OPERATIONS *disk)
+{
+	QWORD sector_num_per_group = (disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
+	char sector[MAX_SECTOR_SIZE];
+	const int BOOT_SECTOR_BASE = 1;
+	
+	// 디스크에 write
+	for (int gi = 0; gi < NUMBER_OF_GROUPS; gi++)
+	{
+		sb->block_group_number = gi; // super block의 block group number가 달라짐
+		//sb->first_data_block_each_group = gi*sector_num_per_group + 17;
+
+		ZeroMemory(sector, sizeof(sector));
+		memcpy(sector, sb, sizeof(EXT2_SUPER_BLOCK));
+
+		// 해당 순서의 block group위치에 super block 써줌
+		disk->write_sector(disk, sector_num_per_group * gi + BOOT_SECTOR_BASE, sector);
+	}
+
+	return EXT2_SUCCESS;
 }
 
 // Group Descriptor
-int write_group_descriptor(DISK_OPERATIONS* disk, EXT2_GROUP_DESCRIPTOR* gd, int groupNum)
+/*int write_group_descriptor(DISK_OPERATIONS* disk, EXT2_GROUP_DESCRIPTOR* gd, int groupNum)
 {
 	char sector[MAX_SECTOR_SIZE];
 	const int BOOT_SECTOR_BASE = 1;
@@ -181,6 +202,28 @@ int write_group_descriptor(DISK_OPERATIONS* disk, EXT2_GROUP_DESCRIPTOR* gd, int
 
 	// 전달받은 group descriptor부분만 수정
 	memcpy(sector + groupNum * sizeof(gd), &gd, sizeof(gd));
+
+	// disk write
+	for (int gi = 0; gi < NUMBER_OF_GROUPS; gi++)
+	{
+		disk->write_sector(disk, sector_num_per_group * gi + BOOT_SECTOR_BASE + 1, sector);
+	}
+
+	return EXT2_SUCCESS;
+}*/
+int write_group_descriptor(DISK_OPERATIONS* disk, EXT2_GROUP_DESCRIPTOR* gd, int groupNum)
+{
+	char sector[MAX_SECTOR_SIZE];
+	const int BOOT_SECTOR_BASE = 1;
+	QWORD sector_num_per_group = (disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
+
+	// 기존의 group descriptor table 읽어와서
+	disk->read_sector(disk, BOOT_SECTOR_BASE+1, sector);
+	EXT2_GROUP_DESCRIPTOR* gd2;
+	gd2 = (EXT2_GROUP_DESCRIPTOR*) sector;
+
+	// 전달받은 group descriptor부분만 수정
+	memcpy(gd2+groupNum, gd, sizeof(EXT2_GROUP_DESCRIPTOR));
 
 	// disk write
 	for (int gi = 0; gi < NUMBER_OF_GROUPS; gi++)
@@ -308,7 +351,7 @@ int create_root(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK * sb)
 	EXT2_GROUP_DESCRIPTOR * gd;
 	EXT2_SUPER_BLOCK * sb_read;
 	QWORD sector_num_per_group = (disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
-	INODE * ip;
+	INODE* ip;
 	const int BOOT_SECTOR_BASE = 1;
 	int gi;
 
@@ -354,7 +397,10 @@ int create_root(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK * sb)
 	ip->size = 0;
 	ip->blocks = 1;
 	ip->block[0] = sb->first_data_block_each_group;
+	printf("ip->blocks = %d", ip->blocks);
 	disk->write_sector(disk, BOOT_SECTOR_BASE + 4, sector);
+	disk->read_sector(disk, 5, sector);
+	printf("blocks = %d\n", ip->blocks);
 
 	return EXT2_SUCCESS;
 }
@@ -616,15 +662,26 @@ int find_entry_on_data(EXT2_FILESYSTEM* fs, INODE first, const BYTE* formattedNa
 
 
 int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
-{    EXT2_GROUP_DESCRIPTOR *gd2;
-	BYTE sector[MAX_SECTOR_SIZE];
-	ZeroMemory(sector,MAX_SECTOR_SIZE);
+{   
+
+	EXT2_GROUP_DESCRIPTOR* gd2;
+	char sector[MAX_SECTOR_SIZE];
+	ZeroMemory(sector,sizeof(sector));
+
 	fs->disk->read_sector(fs->disk, 2, sector) ;  
     gd2 = (EXT2_GROUP_DESCRIPTOR *) sector;
-	UINT32 inode_group = (inode-1)/fs->sb.inode_per_group; // 몇번째 inode group인지 
-	for  ( int i=0 ; i<inode_group; i++)
-	  { gd2++ ;}  
-    fs->gd= *gd2;
+
+	UINT32 inode_group = (inode-1)/fs->sb.inode_per_group; // 몇번째 group인지 
+
+	if(inode_group > 0)
+	{
+		for  ( int i=0 ; i<inode_group; i++)
+	  	{ 
+			gd2++ ;
+		}  
+	}
+
+	memcpy(&fs->gd, gd2, sizeof(EXT2_GROUP_DESCRIPTOR));
       
 	UINT32 inode_structure_size = fs->sb.inode_structure_size; // inode 크기 
 	UINT32 inode_start_block = fs->gd.start_block_of_inode_table; // inode 테이블의 시작 블록 
@@ -633,29 +690,45 @@ int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
 	UINT32 inode_sector = (inode_offset*inode_structure_size)/(MAX_SECTOR_SIZE);
 	//해당 inode 블럭 
     ZeroMemory(sector,MAX_SECTOR_SIZE);
+
 	INODE* inode_table;
 	inode_table = (INODE*)sector;
 
-	fs->disk->read_sector(fs->disk, inode_start_block + inode_sector, sector);
+	fs->disk->read_sector(fs->disk, 1+(inode_group*fs->sb.block_per_group)+inode_start_block+inode_sector, sector);
 
-	inodeBuffer = &inode_table[inode_offset%8];
+	inodeBuffer = &inode_table[(inode_offset -1)%8];
+
+
+	/*if(memcmp(inodeBuffer, &inode_table[inode_offset%8], sizeof(INODE) ) == 0)
+	{
+		printf("same\n");
+	}*/
 		
 	return EXT2_SUCCESS;
 }
 
 int read_root_sector(EXT2_FILESYSTEM* fs, BYTE* sector)
 {    
-	/*INODE * inodeBuffer ;
+	INODE inodeBuffer ;
+	printf("1\n");
     int * root ;
-	get_inode(fs,2,inodeBuffer);
-  	root=	get_data_block_at_inode(fs,*inodeBuffer);
-
+	printf("2\n");
+	//get_inode(fs,1,&inodeBuffer);
+	printf("3\n");
+	/*char sector[MAX_SECTOR_SIZE];
+	fs->disk->write_sector(fs->disk, 5, sector);
+	INODE * inode;
+	inode = (INODE*)sector;
+	inodeBuffer = inode[1];*/
+	printf("inodeBuffer blocks = %d", inodeBuffer.blocks);
+  	root=	get_data_block_at_inode(fs,inodeBuffer);
+	printf("block number : %d\n", root[0]);
 	data_read(fs, 0, root[0], sector);
 
 	return EXT2_SUCCESS;
-*/
 
-	return fs->disk->read_sector(fs->disk,18,sector);
+
+	//return fs->disk->read_sector(fs->disk,18,sector);
      
 }
 
@@ -665,6 +738,7 @@ int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry)
 
 int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
 {    
+	printf("1\n");
 	int* blockNumber;
 	char sector1[MAX_SECTOR_SIZE];
 	char sector2[MAX_SECTOR_SIZE];
@@ -682,11 +756,15 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
  	pointer4 = (int*)sector4;
    
     	
-
+	printf("2\n");
 	if(inode.blocks==0)
-	return EXT2_ERROR;
+		printf("block = 0\n");
+		return EXT2_ERROR;
+
+	printf("3\n");
 	blockNumber = (int*)malloc(sizeof(int)*inode.blocks);
     
+	printf("4\n");
 	if(inode.blocks > 11)
 	{
 		fs->disk->read_sector(fs->disk, inode.block[12], sector1);
@@ -700,6 +778,7 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
 		fs->disk->read_sector(fs->disk, inode.block[14], sector3);
 	}
 
+	printf("5\n");
 	for(int i = 0; i < inode.blocks; i++)
 	{
 		// single indirect
