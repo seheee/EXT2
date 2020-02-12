@@ -406,103 +406,155 @@ int format_name(EXT2_FILESYSTEM* fs, char* name)
 
 int lookup_entry(EXT2_FILESYSTEM* fs, const int inode, const char* name, EXT2_NODE* retEntry)
 {
+	INODE* inodeStruct;
+
+	if(get_inode(fs, inode, inodeStruct))
+	{
+		return EXT2_ERROR;
+	}
+
+	if(inode == 2)
+	{
+		return find_entry_on_root(fs, *inodeStruct, name, retEntry);
+	}
+	else
+	{
+		return find_entry_on_data(fs, *inodeStruct, name, retEntry, inode);
+	}
+	
+
 }
 
+// begin에서 last까지 formattedName을 가진 engry를 sector에서 찾아서 인덱스를 number에 저장
 int find_entry_at_sector(const BYTE* sector, const BYTE* formattedName, UINT32 begin, UINT32 last, UINT32* number)
 {    
+	EXT2_DIR_ENTRY* entry;
+	entry = (EXT2_DIR_ENTRY*) sector;
+	int i;
 
+	for(i = begin; i <= last; i++)
+	{
+		// formattedName이 null
+		if(formattedName == NULL)
+		{
+			if(entry[i].name[0] != DIR_ENTRY_FREE && entry[i].name[0] != DIR_ENTRY_NO_MORE)
+			{
+				*number = i;
+				return EXT2_SUCCESS;
+			}
+			
+		}
+		// formattedName에 값이 있는경우
+		else
+		{
+			if((formattedName[0] == DIR_ENTRY_NO_MORE || formattedName[0] == DIR_ENTRY_FREE) 
+			&& (formattedName[0] == entry[i].name[0]))
+			{
+				*number = i;
+				return EXT2_SUCCESS;
+			}
+			
+			if(memcmp(entry[i].name, formattedName, MAX_ENTRY_NAME_LENGTH) == 0)
+			{
+				*number = i;
+				return EXT2_SUCCESS;
+			}
+		}
+
+		// 더이상 찾을 엔트리가 없는경우
+		if(entry[i].name[0] == DIR_ENTRY_NO_MORE)
+		{
+			*number = i;
+			return -2;
+		}
+		
+	}
+
+	*number = i;
+	return -1;
 }
+
 
 int find_entry_on_root(EXT2_FILESYSTEM* fs, INODE inode, char* formattedName, EXT2_NODE* ret)
 {   
-	/*BYTE sector[MAX_SECTOR_SIZE];
-	ZeroMemory(sector,MAX_SECTOR_SIZE);
-      
-	UINT32 inode_structure_size = fs->sb.inode_structure_size; // inode 크기 
-	UINT32 inode_start_block = fs->gd.start_block_of_inode_table; // inode 테이블의 시작 블록 
-
-	UINT32 inode_sector = (2*inode_structure_size)/(MAX_SECTOR_SIZE);
-	
-	//해당 inode 블럭 
-    ZeroMemory(sector,MAX_SECTOR_SIZE);
-	INODE* inode_table;
-	inode_table = (INODE*)sector;
-
-	fs->disk->read_sector(fs->disk, inode_start_block + inode_sector, sector);
-
-	// inode
-	inode = inode_table[1];*/
-
-	int dataBlockNum = inode.block[0];
-
 	char sector[MAX_SECTOR_SIZE];
-	ZeroMemory(sector, sizeof(sector));
-	EXT2_DIR_ENTRY* entryArr;
-	entryArr = (EXT2_DIR_ENTRY*)sector;
+	EXT2_DIR_ENTRY* entry;
+	UINT32 number;
 
-	data_read(fs, 0, dataBlockNum, sector); 
+	read_root_sector(fs, sector);
+	entry = (EXT2_DIR_ENTRY*) sector;
 	
-	int dir_cnt_per_block = MAX_BLOCK_SIZE/sizeof(EXT2_DIR_ENTRY);
-	EXT2_DIR_ENTRY entry; 
-	EXT2_NODE node;
-	
-	for(int i = 0; i < dir_cnt_per_block; i++)
+	UINT32 entry_cnt_per_block = MAX_BLOCK_SIZE/sizeof(EXT2_DIR_ENTRY);
+	UINT32 last = entry_cnt_per_block - 1;
+	 
+	UINT32 result = find_entry_at_sector(sector, formattedName, 0, last, &number);
+
+	if(result == -1 || result == -2)
 	{
-		entry = entryArr[i];
-		int result = strcmp(entry.name, formattedName);
-		if(result == 0)
-		{
-			node.fs = fs;
-			node.entry = entry;
-			node.location.group = 0;
-			node.location.block = dataBlockNum;
-			node.location.offset = i;
-
-			*ret = node;
-			break;
-		}
+		return EXT2_ERROR;
+	}
+	else
+	{
+		memcpy(&ret->entry, &entry[number], sizeof(EXT2_DIR_ENTRY));
+		ret->fs = fs;
+		ret->location.block = 17;
+		ret->location.group = 0;
+		ret->location.offset = number;
 	}
 
 	return EXT2_SUCCESS;
 }
 
-int find_entry_on_data(EXT2_FILESYSTEM* fs, INODE first, const BYTE* formattedName, EXT2_NODE* ret)
+int find_entry_on_data(EXT2_FILESYSTEM* fs, INODE first, const BYTE* formattedName, EXT2_NODE* ret, UINT32 inode)
 {   
-	int dataBlockNum = first.block[0];
-
 	char sector[MAX_SECTOR_SIZE];
-	ZeroMemory(sector, sizeof(sector));
-	EXT2_DIR_ENTRY* entryArr;
-	entryArr = (EXT2_DIR_ENTRY*)sector;
+	EXT2_DIR_ENTRY* entry;
+	UINT32 number;
+	UINT32* blockNumArr;
+	int i, group;
+	group = inode / fs->sb.inode_per_group;
 
-	// group구하기
-	int group = fs->gd.start_block_of_block_bitmap / fs->sb.block_per_group;
+	UINT32 entry_cnt_per_block = MAX_BLOCK_SIZE/sizeof(EXT2_DIR_ENTRY);
+	UINT32 last = entry_cnt_per_block - 1;
 
-	data_read(fs, group, dataBlockNum, sector); 
-	
-	int dir_cnt_per_block = MAX_BLOCK_SIZE/sizeof(EXT2_DIR_ENTRY);
-	EXT2_DIR_ENTRY entry;
-	EXT2_NODE node;
-	
-	for(int i = 0; i < dir_cnt_per_block; i++)
+	blockNumArr = get_data_block_at_inode(fs, first);
+	for(i = 0; i < sizeof(blockNumArr)/sizeof(int); i++)
 	{
-		entry = entryArr[i];
-		int result = strcmp(entry.name, formattedName);
-		if(result == 0)
+		data_read(fs, group, blockNumArr[i], sector);
+		entry = (EXT2_DIR_ENTRY*) sector;
+
+		UINT32 result = find_entry_at_sector(sector, formattedName, 0, last, &number);
+
+		// 못찾은 경우
+		if(result == -1)
 		{
-			node.fs = fs;
-			node.entry = entry;
-			node.location.group = 0;
-			node.location.block = dataBlockNum;
-			node.location.offset = i;
-
-			*ret = node;
-			break;
+			continue;
 		}
-	}
+		else
+		{
+			if(result == -2)
+			{
+				return EXT2_ERROR;
+			}
+			else
+			{
+				memcpy(&ret->entry, &entry[number], sizeof(EXT2_DIR_ENTRY));
+				ret->fs = fs;
+				ret->location.block = blockNumArr[i];
+				ret->location.group = group;
+				ret->location.offset = number;
 
-	return EXT2_SUCCESS;
+				return EXT2_SUCCESS;
+			}
+		
+		}
+
+		ZeroMemory(sector, sizeof(sector));
+	}
+	
+	
 }
+
 
 
 
@@ -543,7 +595,7 @@ int read_root_sector(EXT2_FILESYSTEM* fs, BYTE* sector)
 	INODE * inodeBuffer ;
     int * root ;
 	get_inode(fs,2,inodeBuffer);
-  	root=	get_data_block_at_inode(fs,inodeBuffer);
+  	root=	get_data_block_at_inode(fs,*inodeBuffer);
 
 	data_read(fs, 0, root[0], sector);
 
@@ -566,14 +618,12 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
 
 	char sector4[MAX_SECTOR_SIZE];
 
-	int* pointer1, pointer2, pointer3;
+	int* pointer1, pointer2, pointer3, pointer4;
 	pointer1 = (int*)sector1;
 	pointer2 = (int*)sector2;
 	pointer3 = (int*)sector3;
     pointer4= (int *)sector4;
-    
-	if(number <0 || number>NUMBER_OF_INODES)
-      	return EXT2_ERROR;
+   
     	
 
 	if(inode.blocks==0)
