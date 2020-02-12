@@ -180,11 +180,6 @@ int fs_mount(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* ro
 }
 void fs_umount(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs)
 {
-    if(fsOprs && fsOprs->pdata)
-	 { free(fsOprs->pdata);
-	 fsOprs->pdata=0;
-	 }
-
 	return;
 }
 

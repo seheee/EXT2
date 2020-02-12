@@ -239,7 +239,7 @@ int fill_descriptor_block(EXT2_GROUP_DESCRIPTOR * gd, EXT2_SUPER_BLOCK * sb, SEC
 // root directory 생성 
 int create_root(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK * sb)
 {
-    EXT2_NODE dotNode, dotdotNode ;
+   /* EXT2_NODE dotNode, dotdotNode ;
 	EXT2_DIR_ENTRY * entry ;
 	BYTE sector[MAX_SECTOR_SIZE];
 	BYTE sector2[MAX_SECTOR_SIZE];
@@ -300,7 +300,63 @@ int create_root(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK * sb)
 	
 
 
-	return EXT2_SUCCESS ;
+	return EXT2_SUCCESS ;*/
+
+	BYTE   sector[MAX_SECTOR_SIZE];
+	SECTOR   rootSector = 0;
+	EXT2_DIR_ENTRY * entry;
+	EXT2_GROUP_DESCRIPTOR * gd;
+	EXT2_SUPER_BLOCK * sb_read;
+	QWORD sector_num_per_group = (disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;
+	INODE * ip;
+	const int BOOT_SECTOR_BASE = 1;
+	int gi;
+
+	ZeroMemory(sector, MAX_SECTOR_SIZE);
+	entry = (EXT2_DIR_ENTRY*)sector;
+
+	memcpy(entry->name, VOLUME_LABLE, 11);
+	entry->name_len = strlen(VOLUME_LABLE);
+	entry->inode = 2;
+	entry++;
+	entry->name[0] = DIR_ENTRY_NO_MORE;
+	rootSector = 1 + sb->first_data_block_each_group;
+	disk->write_sector(disk, rootSector, sector);
+
+	sb_read = (EXT2_SUPER_BLOCK *)sector;
+	for (gi = 0; gi < NUMBER_OF_GROUPS; gi++)
+	{
+		disk->read_sector(disk, sector_num_per_group * gi + BOOT_SECTOR_BASE, sector);
+		sb_read->free_block_count--;
+
+		disk->write_sector(disk, sector_num_per_group * gi + BOOT_SECTOR_BASE, sector);
+	}
+	sb->free_block_count--;
+
+	gd = (EXT2_GROUP_DESCRIPTOR *)sector;
+	disk->read_sector(disk, BOOT_SECTOR_BASE + 1, sector);
+
+
+	gd->free_blocks_count--;
+	gd->directories_count = 1;
+
+	for (gi = 0; gi < NUMBER_OF_GROUPS; gi++)
+		disk->write_sector(disk, sector_num_per_group * gi + BOOT_SECTOR_BASE + 1, sector);
+
+	disk->read_sector(disk, BOOT_SECTOR_BASE + 2, sector);
+	sector[2] |= 0x02;
+	disk->write_sector(disk, BOOT_SECTOR_BASE + 2, sector);
+
+	ZeroMemory(sector, MAX_SECTOR_SIZE);
+	ip = (INODE *)sector;
+	ip++;
+	ip->mode = 0x1FF | 0x4000;
+	ip->size = 0;
+	ip->blocks = 1;
+	ip->block[0] = sb->first_data_block_each_group;
+	disk->write_sector(disk, BOOT_SECTOR_BASE + 4, sector);
+
+	return EXT2_SUCCESS;
 }
 
 // inode 변경사항이 있을 때 meta data수정
@@ -679,26 +735,59 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
 // 슈퍼블록하고 그룹디스크립터의 섹터들을 읽어와서 연결된 구조체에 연결한다 
 
 int ext2_read_superblock(EXT2_FILESYSTEM* fs, EXT2_NODE* root)
-{   BYTE sector[MAX_SECTOR_SIZE];
+{  
+	
+	/*BYTE sector[MAX_SECTOR_SIZE];
     EXT2_SUPER_BLOCK * sb2;
 	EXT2_GROUP_DESCRIPTOR * gd2;
-     ZeroMemory(sector,sizeof(sector));
-   if(fs==NULL || fs->disk==NULL)
-   return EXT2_ERROR;
-   sb2= (EXT2_SUPER_BLOCK *)sector ;
-   fs->disk->read_sector(fs,1,sector);
-    fs->sb=sb2;
+    ZeroMemory(sector,sizeof(sector));
+	
+   	if(fs==NULL || fs->disk==NULL)
+   		return EXT2_ERROR;
+	   
+   	sb2= (EXT2_SUPER_BLOCK *)sector ;
+   	fs->disk->read_sector(fs,1,sector);
+    fs->sb = *sb2;
+	
 	ZeroMemory(sector,sizeof(sector));
 	gd2= (EXT2_GROUP_DESCRIPTOR *)sector ;
-    fs->disk(fs,2,sector);
-	fs->gd= gd2;
+    fs->disk->read_sector(fs,2,sector);
+	fs->gd= *gd2;
 	ZeroMemory(sector,sizeof(sector));
+	
 	if(read_root_sector(fs,sector))
 	return EXT2_ERROR;
-	ZeromMemory(root,sizeof(EXT2_NODE));
+	ZeroMemory(root,sizeof(EXT2_NODE));
 	memcpy(&root->entry,sector,sizeof(EXT2_DIR_ENTRY));
 	root->fs= fs;
-	return EXT2_SUCCESS ;
+	return EXT2_SUCCESS ;*/
+
+	INT result;
+	BYTE sector[MAX_SECTOR_SIZE];
+
+	if (fs == NULL || fs->disk == NULL)
+	{
+		WARNING("DISK OPERATIONS : %p\nEXT2_FILESYSTEM : %p\n", fs, fs->disk);
+		return EXT2_ERROR;
+	}
+
+	meta_read(fs, 0, SUPER_BLOCK, sector);
+	memcpy(&fs->sb, sector, sizeof(EXT2_SUPER_BLOCK));
+	meta_read(fs, 0, GROUP_DES, sector);
+	memcpy(&fs->gd, sector, sizeof(EXT2_GROUP_DESCRIPTOR));
+
+	if (fs->sb.magic_signature != 0xEF53)
+		return EXT2_ERROR;
+
+	ZeroMemory(sector, sizeof(MAX_SECTOR_SIZE));
+	if (read_root_sector(fs, sector))
+		return EXT2_ERROR;
+
+	ZeroMemory(root, sizeof(EXT2_NODE));
+	memcpy(&root->entry, sector, sizeof(EXT2_DIR_ENTRY));
+	root->fs = fs;
+
+	return EXT2_SUCCESS;
 	
 
 

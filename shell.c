@@ -6,9 +6,6 @@
 #include "shell.h"
 #include "disksim.h"
 
-// block과 sector모두 1024byte
-// boot block은 1block, block group은 2048block, 2개의 그룹
-// --> 전체 크기 : 1024(4096+1) byte
 #define		SECTOR					DWORD
 #define		BLOCK_SIZE				1024
 #define		SECTOR_SIZE				1024
@@ -122,7 +119,7 @@ void do_shell(void)
 
 	while (-1)
 	{
-		printf("�й� : [/%s]# ", g_currentDir.name);
+		printf("�й� : [/%s]# ", g_currentDir.name);
 
 		fgets(buf, 1000, stdin);
 		argc = seperate_string(buf, argv);
