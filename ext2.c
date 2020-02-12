@@ -679,7 +679,29 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
 // 슈퍼블록하고 그룹디스크립터의 섹터들을 읽어와서 연결된 구조체에 연결한다 
 
 int ext2_read_superblock(EXT2_FILESYSTEM* fs, EXT2_NODE* root)
-{    
+{   BYTE sector[MAX_SECTOR_SIZE];
+    EXT2_SUPER_BLOCK * sb2;
+	EXT2_GROUP_DESCRIPTOR * gd2;
+     ZeroMemory(sector,sizeof(sector));
+   if(fs==NULL || fs->disk==NULL)
+   return EXT2_ERROR;
+   sb2= (EXT2_SUPER_BLOCK *)sector ;
+   fs->disk->read_sector(fs,1,sector);
+    fs->sb=sb2;
+	ZeroMemory(sector,sizeof(sector));
+	gd2= (EXT2_GROUP_DESCRIPTOR *)sector ;
+    fs->disk(fs,2,sector);
+	fs->gd= gd2;
+	ZeroMemory(sector,sizeof(sector));
+	if(read_root_sector(fs,sector))
+	return EXT2_ERROR;
+	ZeromMemory(root,sizeof(EXT2_NODE));
+	memcpy(&root->entry,sector,sizeof(EXT2_DIR_ENTRY));
+	root->fs= fs;
+	return EXT2_SUCCESS ;
+	
+
+
    
 
 
