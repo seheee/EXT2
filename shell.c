@@ -119,7 +119,7 @@ void do_shell(void)
 
 	while (-1)
 	{
-		printf("ÇÐ¹ø : [/%s]# ", g_currentDir.name);
+		printf("ï¿½Ð¹ï¿½ : [/%s]# ", g_currentDir.name);
 
 		fgets(buf, 1000, stdin);
 		argc = seperate_string(buf, argv);
@@ -282,6 +282,7 @@ int shell_cmd_exit(int argc, char* argv[])
 
 int shell_cmd_mount(int argc, char* argv[])
 {
+	printf("cmd_mount\n");
 	int result;
 	x++;
 	if (g_fs.mount == NULL)

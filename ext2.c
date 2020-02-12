@@ -645,7 +645,7 @@ int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
 
 int read_root_sector(EXT2_FILESYSTEM* fs, BYTE* sector)
 {    
-	INODE * inodeBuffer ;
+	/*INODE * inodeBuffer ;
     int * root ;
 	get_inode(fs,2,inodeBuffer);
   	root=	get_data_block_at_inode(fs,*inodeBuffer);
@@ -653,7 +653,9 @@ int read_root_sector(EXT2_FILESYSTEM* fs, BYTE* sector)
 	data_read(fs, 0, root[0], sector);
 
 	return EXT2_SUCCESS;
+*/
 
+	return fs->disk->read_sector(fs->disk,18,sector);
      
 }
 
@@ -737,32 +739,31 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
 int ext2_read_superblock(EXT2_FILESYSTEM* fs, EXT2_NODE* root)
 {  
 	
-	/*BYTE sector[MAX_SECTOR_SIZE];
-    EXT2_SUPER_BLOCK * sb2;
-	EXT2_GROUP_DESCRIPTOR * gd2;
-    ZeroMemory(sector,sizeof(sector));
+	BYTE sector[MAX_SECTOR_SIZE];
+    
+	ZeroMemory(sector,sizeof(sector));
 	
    	if(fs==NULL || fs->disk==NULL)
    		return EXT2_ERROR;
 	   
-   	sb2= (EXT2_SUPER_BLOCK *)sector ;
-   	fs->disk->read_sector(fs,1,sector);
-    fs->sb = *sb2;
+   	fs->disk->read_sector(fs->disk,1,sector);
+	memcpy(&fs->sb, sector, sizeof(EXT2_SUPER_BLOCK));
 	
 	ZeroMemory(sector,sizeof(sector));
-	gd2= (EXT2_GROUP_DESCRIPTOR *)sector ;
-    fs->disk->read_sector(fs,2,sector);
-	fs->gd= *gd2;
-	ZeroMemory(sector,sizeof(sector));
+    fs->disk->read_sector(fs->disk,2,sector);
+	memcpy(&fs->gd, sector, sizeof(EXT2_GROUP_DESCRIPTOR));
 	
+	ZeroMemory(sector,sizeof(sector));
+	if (fs->sb.magic_signature != 0xEF53)
+		return EXT2_ERROR;
 	if(read_root_sector(fs,sector))
-	return EXT2_ERROR;
+		return EXT2_ERROR;
 	ZeroMemory(root,sizeof(EXT2_NODE));
 	memcpy(&root->entry,sector,sizeof(EXT2_DIR_ENTRY));
 	root->fs= fs;
-	return EXT2_SUCCESS ;*/
+	return EXT2_SUCCESS ;
 
-	INT result;
+	/*INT result;
 	BYTE sector[MAX_SECTOR_SIZE];
 
 	if (fs == NULL || fs->disk == NULL)
@@ -787,7 +788,7 @@ int ext2_read_superblock(EXT2_FILESYSTEM* fs, EXT2_NODE* root)
 	memcpy(&root->entry, sector, sizeof(EXT2_DIR_ENTRY));
 	root->fs = fs;
 
-	return EXT2_SUCCESS;
+	return EXT2_SUCCESS;*/
 	
 
 

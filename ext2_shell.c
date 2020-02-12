@@ -147,19 +147,24 @@ static SHELL_FS_OPERATIONS   g_fsOprs =
 
 int fs_mount(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* root)
 {
+	printf("fs_mount\n");
 	EXT2_FILESYSTEM* fs;
 	EXT2_NODE ext2_entry;
 	int result;
 
 	*fsOprs = g_fsOprs;
 
+	printf("before malloc\n");
 	fsOprs->pdata = malloc(sizeof(EXT2_FILESYSTEM));
+	printf("after malloc\n");
 	fs = FSOPRS_TO_EXT2FS(fsOprs);
 	ZeroMemory(fs, sizeof(EXT2_FILESYSTEM));
 	fs->disk = disk;
-
+	printf("before read superblock\n");
 	result = ext2_read_superblock(fs, &ext2_entry);
+	printf("after read superblock\n");
 
+	result = EXT2_SUCCESS;
 	if (result == EXT2_SUCCESS)
 	{
 		printf("number of groups         : %d\n", NUMBER_OF_GROUPS);
@@ -173,7 +178,8 @@ int fs_mount(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* ro
 		printf("\n----------------------------------------------\n");
 	}
 
-	printf("%s", ext2_entry.entry.name);
+	printf("%d", result);
+	//printf("%s", ext2_entry.entry.name);
 	ext2_entry_to_shell_entry(fs, &ext2_entry, root);
 
 	return result;
