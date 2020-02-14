@@ -11,7 +11,7 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 {
 }
 
-UINT32 get_free_inode_number(EXT2_FILESYSTEM* fs);
+UINT32 get_free_inode_number(EXT2_FILESYSTEM* fs, int group);
 
 // format
 /* 	
@@ -23,7 +23,6 @@ UINT32 get_free_inode_number(EXT2_FILESYSTEM* fs);
 */
 int ext2_format(DISK_OPERATIONS* disk)
 {
-
 
 	EXT2_SUPER_BLOCK sb; // super block
 	EXT2_GROUP_DESCRIPTOR gd; // group descriptor 2개
@@ -410,8 +409,63 @@ void process_meta_data_for_inode_used(EXT2_NODE * retEntry, UINT32 inode_num, in
 {
 }
 
-int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry, int fileType)
+int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 {
+	BYTE entryName[2] = {0, };
+
+	EXT2_NODE * entry;
+	EXT2_NODE * entryNoMore;
+	char sector[MAX_SECTOR_SIZE];
+	EXT2_DIR_ENTRY* ent = (EXT2_DIR_ENTRY*) sector;
+
+	entryName[0] = DIR_ENTRY_FREE;
+	
+	// free 디렉터리 엔트리를 찾은 경우
+	if(lookup_entry(retEntry->fs, inode_num, entryName, entry) == EXT2_SUCCESS)
+	{
+		data_read(entry->fs, entry->location.group, entry->location.block, sector );
+		ent[entry->location.offset] = retEntry->entry;
+		data_write(entry->fs, entry->location.group, entry->location.block, sector);
+		retEntry->location = entry->location;
+	}
+	// free 디렉터리 엔트리를 찾지 못한 경우
+	else
+	{
+		entryName[0] = DIR_ENTRY_NO_MORE;
+	
+		if(lookup_entry(retEntry->fs, 2, entryName, entryNoMore) == EXT2_SUCCESS)
+		{
+			// DIR_ENTRY_NO_MORE위치에 새로운 entry 추가
+			data_read(entryNoMore->fs, entryNoMore->location.group, entryNoMore->location.block, sector);
+			ent[entryNoMore->location.offset] = retEntry->entry;
+			data_write(entryNoMore->fs, entryNoMore->location.group, entryNoMore->location.block, sector);
+			retEntry->location = entryNoMore->location;
+
+			entryNoMore->location.offset++;
+
+			if(entryNoMore->location.offset == (MAX_BLOCK_SIZE/sizeof(EXT2_DIR_ENTRY)))
+			{
+				// 루트 디렉터리의 경우에는 다음 블록으로 넘어가지 않음
+				if(inode_num != 2)
+				{
+					int num = expand_block(retEntry->fs, inode_num);
+					entryNoMore->location.block = num;
+					entryNoMore->location.offset=0;
+
+					data_read(entryNoMore->fs, entryNoMore->location.group, entryNoMore->location.block, sector );
+					ent[entryNoMore->location.offset].name[0] =DIR_ENTRY_NO_MORE;
+					data_write(entryNoMore->fs, entryNoMore->location.group, entryNoMore->location.block, sector);
+
+				}
+			}
+		}
+
+		
+
+		
+	}
+
+	return EXT2_SUCCESS;
 }
 
 UINT32 get_available_data_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
@@ -755,9 +809,13 @@ int read_root_sector(EXT2_FILESYSTEM* fs, BYTE* sector)
 	printf("2\n");
 	get_inode(fs,2,inodeBuffer);
 	printf("inodeBuffer blocks = %d\n", inodeBuffer->blocks);
-  	root=	get_data_block_at_inode(fs,inodeBuffer);
+
+	root=	get_data_block_at_inode(fs,inodeBuffer);
 	printf("block number : %d\n", root[0]);
 	data_read(fs, 0, root[0], sector);
+
+  	
+	
 
 	return EXT2_SUCCESS;
 
@@ -768,6 +826,39 @@ int read_root_sector(EXT2_FILESYSTEM* fs, BYTE* sector)
 
 int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry)
 {
+	//EXT2_DIR_ENTRY_LOCATION parentLocation;
+	BYTE name[MAX_NAME_LENGTH] = {0, };
+	int result;
+
+	strncpy(name, entryName, MAX_NAME_LENGTH);
+
+	if(format_name(parent->fs, name))
+	{
+		return EXT2_ERROR;
+	}
+
+	ZeroMemory(retEntry, sizeof(EXT2_NODE));
+	memcpy(retEntry->entry.name, name, MAX_ENTRY_NAME_LENGTH);
+
+	/*parentLocation.group = parent->location.group;
+	parentLocation.block = parent->location.block;
+	parentLocation.offset = parent->location.offset;*/
+
+	if(lookup_entry(parent->fs, parent->entry.inode, name, retEntry) == EXT2_SUCCESS)
+	{
+		return EXT2_ERROR;
+	}
+
+	retEntry->fs = parent->fs;
+	retEntry->entry.inode = get_free_inode_number(parent->fs, (parent->entry.inode-1)/parent->fs->sb.inode_per_group);
+	result = insert_entry(parent->entry.inode, retEntry);
+
+	if(result)
+	{
+		return EXT2_ERROR;
+	}
+	
+	return EXT2_SUCCESS;
 }
 
 int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE* inode )
@@ -874,9 +965,11 @@ int ext2_read_superblock(EXT2_FILESYSTEM* fs, EXT2_NODE* root)
 	ZeroMemory(root,sizeof(EXT2_NODE));
 	memcpy(&root->entry,sector,sizeof(EXT2_DIR_ENTRY));
 	root->fs= fs;
+
 	root->location.block=17;
 	root->location.group=0;
 	root->location.offset=0;
+
 	return EXT2_SUCCESS ;
 
 	/*INT result;
@@ -915,14 +1008,15 @@ int ext2_read_superblock(EXT2_FILESYSTEM* fs, EXT2_NODE* root)
 
 }
 
-UINT32 get_free_inode_number(EXT2_FILESYSTEM* fs)
+UINT32 get_free_inode_number(EXT2_FILESYSTEM* fs, int group)
 {
-	int cnt = 0;
+	int cnt = group*fs->sb.inode_per_group;
 
 	char sector[MAX_SECTOR_SIZE];
 	
-	for(int k = 0; k < NUMBER_OF_GROUPS; k++)
-	{
+	//for(int k = 0; k < NUMBER_OF_GROUPS; k++)
+	//{
+		int k = group;
 		fs->disk->read_sector(fs->disk, fs->gd.start_block_of_inode_bitmap + (k*fs->sb.block_per_group), sector);
 		for(int i = 0; i < MAX_SECTOR_SIZE; i++)
 		{
@@ -932,10 +1026,11 @@ UINT32 get_free_inode_number(EXT2_FILESYSTEM* fs)
 				if(!((unsigned char)sector[i] >> j)^0)
 				{
 					return cnt;
-				}			
+				}	
+					
 			}
 		}
-	}
+	//}
 	
 }
 
