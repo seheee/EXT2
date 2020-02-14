@@ -6,7 +6,7 @@ typedef struct
 #include "ext2.h"
 #define MIN( a, b ) ( ( a ) < ( b ) ? ( a ) : ( b ) )
 #define MAX( a, b ) ( ( a ) > ( b ) ? ( a ) : ( b ) )
-int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE *inode);
+int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode);
 int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, const char* buffer)
 {
 }
@@ -399,6 +399,9 @@ int create_root(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK * sb)
 	ip->block[0] = sb->first_data_block_each_group;
 	printf("ip->blocks = %d", ip->blocks);
 	disk->write_sector(disk, BOOT_SECTOR_BASE + 4, sector);
+	disk->read_sector(disk, 5, sector);
+	printf("blocks = %d\n", ip->blocks);
+
 	return EXT2_SUCCESS;
 }
 
@@ -617,7 +620,7 @@ int find_entry_on_data(EXT2_FILESYSTEM* fs, INODE first, const BYTE* formattedNa
 	UINT32 entry_cnt_per_block = MAX_BLOCK_SIZE/sizeof(EXT2_DIR_ENTRY);
 	UINT32 last = entry_cnt_per_block - 1;
 
-	blockNumArr = get_data_block_at_inode(fs, &first);
+	blockNumArr = get_data_block_at_inode(fs, first);
 	for(i = 0; i < sizeof(blockNumArr)/sizeof(int); i++)
 	{
 		data_read(fs, group, blockNumArr[i], sector);
@@ -682,11 +685,9 @@ int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
       
 	UINT32 inode_structure_size = fs->sb.inode_structure_size; // inode 크기 
 	UINT32 inode_start_block = fs->gd.start_block_of_inode_table; // inode 테이블의 시작 블록 
-            printf("inode_start_block: %d",inode_start_block);
+
 	UINT32 inode_offset = inode % (fs->sb.inode_per_group+1); // 그룹내의 inode table에서 몇번째인지 
 	UINT32 inode_sector = (inode_offset*inode_structure_size)/(MAX_SECTOR_SIZE);
-	printf("inode_offset:%d\n",inode_offset);
-	printf("inode_sector:%d\n",inode_sector);
 	//해당 inode 블럭 
     ZeroMemory(sector,MAX_SECTOR_SIZE);
 
@@ -694,31 +695,40 @@ int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
 	inode_table = (INODE*)sector;
 
 	fs->disk->read_sector(fs->disk, 1+(inode_group*fs->sb.block_per_group)+inode_start_block+inode_sector, sector);
-    for(int i=1; i<(inode_offset%8);i++)
-	        inode_table ++;
-	*inodeBuffer = *inode_table;
-    
-       printf("%d\n",inodeBuffer->blocks);
-	   printf("%x\n",inodeBuffer->mode);
-	
+
+	inodeBuffer = &inode_table[(inode_offset -1)%8];
+
+
+	/*if(memcmp(inodeBuffer, &inode_table[inode_offset%8], sizeof(INODE) ) == 0)
+	{
+		printf("same\n");
+	}*/
 		
 	return EXT2_SUCCESS;
 }
 
 int read_root_sector(EXT2_FILESYSTEM* fs, BYTE* sector)
-{  
-	
-    BYTE sector2[MAX_SECTOR_SIZE];
-	INODE *inodeBuffer;
-	inodeBuffer=(INODE *)sector2;
-	
-	int *root;
-	get_inode(fs,2,inodeBuffer);
-	printf("root blocks: %d\n",inodeBuffer->mode);
-	root = get_data_block_at_inode(fs,inodeBuffer);
-	        printf("%d",root[0]);
-			data_read(fs,0,root[0],sector);
+{    
+	INODE inodeBuffer ;
+	printf("1\n");
+    int * root ;
+	printf("2\n");
+	//get_inode(fs,1,&inodeBuffer);
+	printf("3\n");
+	/*char sector[MAX_SECTOR_SIZE];
+	fs->disk->write_sector(fs->disk, 5, sector);
+	INODE * inode;
+	inode = (INODE*)sector;
+	inodeBuffer = inode[1];*/
+	printf("inodeBuffer blocks = %d", inodeBuffer.blocks);
+  	root=	get_data_block_at_inode(fs,inodeBuffer);
+	printf("block number : %d\n", root[0]);
+	data_read(fs, 0, root[0], sector);
+
 	return EXT2_SUCCESS;
+
+
+	//return fs->disk->read_sector(fs->disk,18,sector);
      
 }
 
@@ -726,7 +736,7 @@ int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry)
 {
 }
 
-int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE * inode )
+int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE inode )
 {    
 	printf("1\n");
 	int* blockNumber;
@@ -747,29 +757,29 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE * inode )
    
     	
 	printf("2\n");
-	if(inode->blocks==0)
-		
+	if(inode.blocks==0)
+		printf("block = 0\n");
 		return EXT2_ERROR;
 
 	printf("3\n");
-	blockNumber = (int*)malloc(sizeof(int)*inode->blocks);
+	blockNumber = (int*)malloc(sizeof(int)*inode.blocks);
     
 	printf("4\n");
-	if(inode->blocks > 11)
+	if(inode.blocks > 11)
 	{
-		fs->disk->read_sector(fs->disk, inode->block[12], sector1);
+		fs->disk->read_sector(fs->disk, inode.block[12], sector1);
 	}
-	if(inode->blocks > 267)
+	if(inode.blocks > 267)
 	{
-		fs->disk->read_sector(fs->disk, inode->block[13], sector2);
+		fs->disk->read_sector(fs->disk, inode.block[13], sector2);
 	}
-	if(inode->blocks > 256*256+11)
+	if(inode.blocks > 256*256+11)
 	{
-		fs->disk->read_sector(fs->disk, inode->block[14], sector3);
+		fs->disk->read_sector(fs->disk, inode.block[14], sector3);
 	}
 
 	printf("5\n");
-	for(int i = 0; i < inode->blocks; i++)
+	for(int i = 0; i < inode.blocks; i++)
 	{
 		// single indirect
 		if(i > 11 && i < 268)
@@ -795,7 +805,7 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE * inode )
 		// direct
 		else
 		{
-			blockNumber[i] = inode->block[i];
+			blockNumber[i] = inode.block[i];
 		}
 		
 	}
@@ -807,7 +817,7 @@ int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE * inode )
 
 int ext2_read_superblock(EXT2_FILESYSTEM* fs, EXT2_NODE* root)
 {  
-	 
+	
 	BYTE sector[MAX_SECTOR_SIZE];
     
 	ZeroMemory(sector,sizeof(sector));
@@ -825,14 +835,11 @@ int ext2_read_superblock(EXT2_FILESYSTEM* fs, EXT2_NODE* root)
 	ZeroMemory(sector,sizeof(sector));
 	if (fs->sb.magic_signature != 0xEF53)
 		return EXT2_ERROR;
-	   printf("hello world");
+	if(read_root_sector(fs,sector))
+		return EXT2_ERROR;
 	ZeroMemory(root,sizeof(EXT2_NODE));
+	memcpy(&root->entry,sector,sizeof(EXT2_DIR_ENTRY));
 	root->fs= fs;
-	 root->entry.inode=2;
-	root->entry.name[0]="r";
-	root->entry.name[1]="o";
-	root->entry.name[2]= "o";
-	root->entry.name[3]= "t"; 
 	return EXT2_SUCCESS ;
 
 	/*INT result;
