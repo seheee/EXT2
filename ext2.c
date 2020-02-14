@@ -479,8 +479,52 @@ void process_meta_data_for_block_used(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 
 // 파일 크기가 커질때 block 더 할당
 UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
-{    
+{   INODE * inodeBuffer ;
+get_inode(fs,inode_num,inodeBuffer);
+int blocks= inodeBuffer->blocks; 
+  int used_blocks=0;
 
+	int groupNum = (inode_num-1)/fs->sb.inode_per_group;
+	char sector[MAX_SECTOR_SIZE];
+  	fs->disk->read_sector(fs->disk, 1+groupNum*fs->sb.block_per_group+2, sector);
+	 for(int i = 0; i < MAX_SECTOR_SIZE; i++)
+		{
+			for(int j = 0; j < 8; j++)
+			{
+				
+				if(!((unsigned char)sector[i] >> j)^0)
+				{
+					break;
+				}
+				used_blocks ++;			
+			}
+		}
+
+    if(blocks<12)
+	{
+       inodeBuffer->block[++blocks]= used_blocks ;
+	}
+	else if(blocks < 12+256)
+	{
+    	int blocknumber = inodeBuffer->block[12];
+        int * a= blocknumber ;
+		a[blocks-12] = used_blocks;
+            blocks++;
+	}
+	else if(blocks< 12+256+256*256)
+	{
+		int blockNumber = inodeBuffer->block[13];
+		int * a = blockNumber;
+		int *b = a[(blocks-268)/256]; 
+        b[(blocks-268)%256] = used_blocks;
+            blocks++;
+
+	}
+
+   return EXT2_SUCCESS ;
+        
+
+     
 
 
 
@@ -921,9 +965,11 @@ int ext2_read_superblock(EXT2_FILESYSTEM* fs, EXT2_NODE* root)
 	ZeroMemory(root,sizeof(EXT2_NODE));
 	memcpy(&root->entry,sector,sizeof(EXT2_DIR_ENTRY));
 	root->fs= fs;
-	root->location.group = 0;
-	root->location.block = 17;
-	root->location.offset = 0;
+
+	root->location.block=17;
+	root->location.group=0;
+	root->location.offset=0;
+
 	return EXT2_SUCCESS ;
 
 	/*INT result;
@@ -1035,10 +1081,13 @@ int ext2_read_dir(EXT2_NODE* dir, EXT2_NODE_ADD adder, void* list)
 	int entriesPerSector = (MAX_SECTOR_SIZE/sizeof(EXT2_DIR_ENTRY));
 	INODE* inodeBuffer; 
 	get_inode(dir->fs,dir->entry.inode,inodeBuffer);
+	int  inodeGroup  = dir->entry.inode/ (dir->fs->sb.inode_per_group+1); // 몇번째 아이노드 그룹인지 
    if(dir->entry.inode==2)// 루트 디렉토리일경우 
    {
     read_root_sector(dir->fs,sector);
+	printf("after reading root_sector\n");
 	read_dir_from_sector(dir->fs,sector,adder,list);
+	printf("after read_dir_from_sector\n");
    }
    else if (inodeBuffer->mode!=0x4000) // 디렉토리가 아닐경우 
    {
@@ -1048,9 +1097,12 @@ int ext2_read_dir(EXT2_NODE* dir, EXT2_NODE_ADD adder, void* list)
    {
     if(inodeBuffer->block[0]==0)  // 아무 것도 없을 경우 
      return EXT2_ERROR ;
-    
-
-
+    int * dataBlocks = get_data_block_at_inode(dir->fs,inodeBuffer);
+    for(int j=0; j<inodeBuffer->blocks ; j++)
+	{
+		data_read(dir->fs,inodeGroup,dataBlocks[j],sector);
+      read_dir_from_sector( dir->fs,sector,adder,list);
+	}
 
    }
    return EXT2_SUCCESS ;
@@ -1060,18 +1112,25 @@ int ext2_read_dir(EXT2_NODE* dir, EXT2_NODE_ADD adder, void* list)
 int read_dir_from_sector(EXT2_FILESYSTEM* fs, BYTE* sector, EXT2_NODE_ADD adder, void* list)
 {     int  entriesPerSector;
       EXT2_DIR_ENTRY * dir;
-	  EXT2_NODE node ;
-	  
+	  EXT2_NODE  node ;
+	   dir= (EXT2_DIR_ENTRY *)sector ;
+	   int i;
+	   int inodeOffset ,inodeGroup ;
+	   printf("danddf\n");
 	  entriesPerSector = ( MAX_SECTOR_SIZE/sizeof(EXT2_DIR_ENTRY));
-	  for(int i=0; i<entriesPerSector ; i++)
+	 
+	
+    
+	  for( i=0; i<entriesPerSector ; i++)
 	  {
 
        if(dir->name[0]== DIR_ENTRY_FREE)
 	    continue ;
 		else if(dir->name[0]==DIR_ENTRY_NO_MORE)
 		break;
-		else if(!(dir->inode ==2))
+		else 
      {
+		
      node.fs = fs;
 	 node.entry=*dir;
     node.location.offset =i; 
@@ -1079,7 +1138,7 @@ int read_dir_from_sector(EXT2_FILESYSTEM* fs, BYTE* sector, EXT2_NODE_ADD adder,
 	 }
           dir ++;
 	  }
-	  return EXT2_SUCCESS;	  
+	  return (i == entriesPerSector ? 0:1);  
 }
 
 char* my_strncpy(char* dest, const char* src, int length)
