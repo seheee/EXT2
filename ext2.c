@@ -850,8 +850,18 @@ int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry)
 		return EXT2_ERROR;
 	}
 
+	int group = (parent->entry.inode-1)/parent->fs->sb.inode_per_group;
+	char sector[MAX_SECTOR_SIZE];
+
+	// fs, inode할당
 	retEntry->fs = parent->fs;
-	retEntry->entry.inode = get_free_inode_number(parent->fs, (parent->entry.inode-1)/parent->fs->sb.inode_per_group);
+	retEntry->entry.inode = get_free_inode_number(parent->fs, group);
+
+	// inode bitmap
+	parent->fs->disk->read_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
+	write_bitmap(retEntry->entry.inode-1, 1, sector);
+	parent->fs->disk->write_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
+
 	result = insert_entry(parent->entry.inode, retEntry);
 
 	if(result)
@@ -1071,12 +1081,17 @@ int set_inode_onto_inode_table(EXT2_FILESYSTEM *fs, const UINT32 which_inode_num
 }
 
 int ext2_lookup(EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEntry)
-{    
+{
+	BYTE formattedName[MAX_NAME_LENGTH] = {0, };
 
+	strncpy(formattedName, entryName, MAX_NAME_LENGTH);
 
+	if(format_name(parent->fs, formattedName))
+	{
+		return EXT2_ERROR;
+	}
 
-
-
+	return lookup_entry(parent->fs, parent->entry.inode, formattedName, retEntry);
 }
 
 int ext2_read_dir(EXT2_NODE* dir, EXT2_NODE_ADD adder, void* list)
@@ -1163,19 +1178,20 @@ int write_bitmap(int number, int set, BYTE * sector)// 아이노드 비트맵을
     int offset = number / 8 ;
 	int offset2 = number %8 ;
 
- if(set==0)
-   {  
-	   sector[offset]  &= (0x00<<(offset2));
+ 	if(set==0)
+  	{  
+	   sector[offset] &= (~(0x01<<(offset2)));
 	   return EXT2_SUCCESS;
-   }
-   else if(set==1)
-{      sector[offset] |= 0x01<<(offset2) ;
-	 return EXT2_SUCCESS;
-}
-  else
-  {
-	 return EXT2_ERROR ;
-  }
+   	}
+   	else if(set==1)
+	{      
+		sector[offset] |= 0x01<<(offset2);
+	 	return EXT2_SUCCESS;
+	}
+  	else
+  	{
+		return EXT2_ERROR ;
+  	}
 
 }
 
