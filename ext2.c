@@ -409,7 +409,7 @@ void process_meta_data_for_inode_used(EXT2_NODE * retEntry, UINT32 inode_num, in
 {
 }
 
-int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
+/*int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 {
 	BYTE entryName[2] = {0, };
     
@@ -418,6 +418,8 @@ int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 	char sector2[MAX_SECTOR_SIZE];
 	EXT2_DIR_ENTRY* ent = (EXT2_DIR_ENTRY*) sector;
 	entry = (EXT2_NODE*) sector2;
+
+	printf("retEntry->entry.name : %s\n", retEntry->entry.name);
 
 	entryName[0] = DIR_ENTRY_FREE;
 	printf("before entry \n");
@@ -466,6 +468,77 @@ int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 					data_read(entry->fs, entry->location.group, entry->location.block, sector );
 					ent[entry->location.offset].name[0] =DIR_ENTRY_NO_MORE;
 					data_write(entry->fs, entry->location.group, entry->location.block, sector);
+
+				}
+			}
+		}
+
+		
+
+		
+	}
+        
+	return EXT2_SUCCESS;
+}*/
+
+int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
+{
+	BYTE entryName[2] = {0, };
+    
+	EXT2_NODE entry = {0, };
+	char sector[MAX_SECTOR_SIZE];
+	char sector2[MAX_SECTOR_SIZE];
+	EXT2_DIR_ENTRY* ent = (EXT2_DIR_ENTRY*) sector;
+	
+	printf("retEntry->entry.name : %s\n", retEntry->entry.name);
+
+	entryName[0] = DIR_ENTRY_FREE;
+	printf("before entry \n");
+	// free 디렉터리 엔트리를 찾은 경우
+	if(lookup_entry(retEntry->fs, inode_num, entryName, &entry) == EXT2_SUCCESS)
+	{
+		printf("lookup_entry에서 free디렉터리 엔트리 찾음\n");
+		data_read(entry.fs, entry.location.group, entry.location.block, sector );
+		ent[entry.location.offset] = retEntry->entry;
+		data_write(entry.fs, entry.location.group, entry.location.block, sector);
+		retEntry->location = entry.location;
+	}
+	// free 디렉터리 엔트리를 찾지 못한 경우
+	else
+	{
+		printf("lookup_entry에서 free디렉터리 엔트리 못찾아서 no_more검색\n");
+		entryName[0] = DIR_ENTRY_NO_MORE;
+	
+		if(lookup_entry(retEntry->fs, 2, entryName, &entry) == EXT2_SUCCESS)
+		{
+			printf("success 리턴1\n");
+			printf("entry->location.group : %d\n", entry.location.group);
+			printf("entry->location.block : %d\n", entry.location.block);
+			// DIR_ENTRY_NO_MORE위치에 새로운 entry 추가
+			
+			data_read(entry.fs, entry.location.group, entry.location.block, sector);
+			printf("새로운 엔트리 추가 끝1\n");
+			ent[entry.location.offset] = retEntry->entry;
+			printf("새로운 엔트리 추가 끝2\n");
+			data_write(entry.fs, entry.location.group, entry.location.block, sector);
+			printf("새로운 엔트리 추가 끝3\n");
+			retEntry->location = entry.location;
+
+			printf("새로운 엔트리 추가 끝4\n");
+			entry.location.offset++;
+
+			if(entry.location.offset == (MAX_BLOCK_SIZE/sizeof(EXT2_DIR_ENTRY)))
+			{
+				// 루트 디렉터리의 경우에는 다음 블록으로 넘어가지 않음
+				if(inode_num != 2)
+				{
+					int num = expand_block(retEntry->fs, inode_num);
+					entry.location.block = num;
+					entry.location.offset=0;
+
+					data_read(entry.fs, entry.location.group, entry.location.block, sector );
+					ent[entry.location.offset].name[0] =DIR_ENTRY_NO_MORE;
+					data_write(entry.fs, entry.location.group, entry.location.block, sector);
 
 				}
 			}
@@ -624,8 +697,8 @@ int lookup_entry(EXT2_FILESYSTEM* fs, const int inode, const char* name, EXT2_NO
 	char sector[MAX_SECTOR_SIZE];
 	inodeStruct = (INODE*) sector;
 
-          printf("지금 lookup_entry안에 들어와있어요\n");
-		  printf("%d      %s\n",inode,name);
+    printf("지금 lookup_entry안에 들어와있어요\n");
+	printf("%d      %s\n",inode,name);
 	if(get_inode(fs, inode, inodeStruct))
 	{
 		return EXT2_ERROR;
@@ -720,9 +793,9 @@ int find_entry_on_root(EXT2_FILESYSTEM* fs, INODE inode, char* formattedName, EX
 		return EXT2_ERROR;
 	}
 	else
-	{   BYTE sector2 [MAX_SECTOR_SIZE];
-		ret= (EXT2_DIR_ENTRY *)sector2;
-	   ZeroMemory(sector2,sizeof(sector));
+	{   //BYTE sector2 [MAX_SECTOR_SIZE];
+		//ret= (EXT2_DIR_ENTRY *)sector2;
+	   //ZeroMemory(sector2,sizeof(sector));
 		printf("error아님\n");
 		printf("entry[number] : %d\n", entry[number].inode);
 		memcpy(&ret->entry, &entry[number], sizeof(EXT2_DIR_ENTRY));
@@ -831,11 +904,16 @@ printf("get_inode_9\n");
        
 	INODE* inode_table;
 	inode_table = (INODE*)sector;
+	printf("1\n");
 	fs->disk->read_sector(fs->disk, 1+(inode_group*fs->sb.block_per_group)+inode_start_block+inode_sector, sector);
+	printf("1\n");
+
+	// for문 안써도 됨. offset 계산해서 더해주면 됨
      for(int i=1; i<(inode_offset %8); i++)
            inode_table ++;
-           
+           printf("1\n");
 		   *inodeBuffer = *inode_table;  	
+		   printf("1\n");
 	return EXT2_SUCCESS;
 }
 
@@ -904,6 +982,7 @@ int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry)
 	parent->fs->disk->write_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
 
 	printf("insert_entry 호출 전\n");
+	printf("retEntry->entry.name : %s\n", retEntry->entry.name);
 	result = insert_entry(parent->entry.inode, retEntry);
 	printf("insert_entry 호출 후\n");
 
