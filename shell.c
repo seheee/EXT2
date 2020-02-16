@@ -293,14 +293,14 @@ int shell_cmd_mount(int argc, char* argv[])
 
 	result = g_fs.mount(&g_disk, &g_fsOprs, &g_rootDir);
 	g_currentDir = g_rootDir;
-
+     
 	if (result < 0)
 	{
 		printf("%s file system mounting has been failed\n", g_fs.name);
 		return -1;
 	}
 	else
-	{
+	{  printf(" %s\n",g_currentDir.name);
 		printf(" : %s file system has been mounted successfully\n", g_fs.name);
 		g_isMounted = 1;
 	}
