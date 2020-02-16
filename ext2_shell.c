@@ -178,10 +178,10 @@ int fs_mount(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* ro
 		printf("\n----------------------------------------------\n");
 	}
 
-	printf("%d", result);
-	//printf("%s", ext2_entry.entry.name);
+	printf("%d\n", result);
+	printf("%s\n", ext2_entry.entry.name);
 	ext2_entry_to_shell_entry(fs, &ext2_entry, root);
-
+	 printf("%d\n",root->isDirectory);
 	return result;
 }
 void fs_umount(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs)
@@ -305,8 +305,9 @@ int fs_read_dir(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_
 		release_entry_list(list);
 
 	shell_entry_to_ext2_entry(parent, &entry);
+	printf("before reading directory \n");
 	ext2_read_dir(&entry, adder, list);
-
+          printf("after reading directory \n");
 	return EXT2_SUCCESS;
 }
 
@@ -367,7 +368,7 @@ int fs_mkdir(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENT
 
 	if (is_exist(disk, fsOprs, parent, name))
 		return EXT2_ERROR;
-
+    printf("after exist\n");
 	shell_entry_to_ext2_entry(parent, &EXT2_Parent);
 
 	result = ext2_mkdir(&EXT2_Parent, name, &EXT2_Entry);
