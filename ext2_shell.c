@@ -147,22 +147,19 @@ static SHELL_FS_OPERATIONS   g_fsOprs =
 
 int fs_mount(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* root)
 {
-	printf("fs_mount\n");
 	EXT2_FILESYSTEM* fs;
 	EXT2_NODE ext2_entry;
 	int result;
 
 	*fsOprs = g_fsOprs;
 
-	printf("before malloc\n");
 	fsOprs->pdata = malloc(sizeof(EXT2_FILESYSTEM));
-	printf("after malloc\n");
+
 	fs = FSOPRS_TO_EXT2FS(fsOprs);
 	ZeroMemory(fs, sizeof(EXT2_FILESYSTEM));
 	fs->disk = disk;
-	printf("before read superblock\n");
+
 	result = ext2_read_superblock(fs, &ext2_entry);
-	printf("after read superblock\n");
 
 	result = EXT2_SUCCESS;
 	if (result == EXT2_SUCCESS)
@@ -258,21 +255,16 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 	ZeroMemory(shell_entry, sizeof(SHELL_ENTRY));
 
 	int inode = ext2_entry->entry.inode;
-	printf("inode : %d\n", inode);
-	int result = get_inode(fs, inode, &inodeBuffer);
 
-        printf("ddfsf \n");
-		printf(" %s \n",ext2_entry->entry.name);
+	int result = get_inode(fs, inode, &inodeBuffer);
 
 	if (ext2_entry->entry.name[0] != '.' && inode == 2);
 	else {
-		printf("1\n");
+	
 		*str = shell_entry->name;
-		 printf("ddfsf \n");
+		 
 		memcpy(&str[1], ext2_entry->entry.name, MAX_NAME_LENGTH);
 
-		 printf("str : %s\n", str);
-		 printf("ext2_entry->entry.name; : %s\n", ext2_entry->entry.name);
 		/*if (ext2_entry->entry.name[8] != 0x20)
 		{    printf("ddfsf \n");
 
@@ -282,19 +274,20 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 			  printf("ddfsf \n");
 		}   */
 	}
-	 printf("ddfsf \n");
-	if (FILE_TYPE_DIR & inodeBuffer.mode)
-	{	printf("3\n");
-		shell_entry->isDirectory = 1;}
-	else
 
+	if (FILE_TYPE_DIR & inodeBuffer.mode)
+	{
+		shell_entry->isDirectory = 1;
+	}
+	else
+	{
 		shell_entry->isDirectory = 0;
- printf("ddfsf \n");
+	}
 
 	shell_entry->permition = 0x01FF & inodeBuffer.mode;
 
 	shell_entry->size = inodeBuffer.size;
- printf("ddfsf \n");
+ 
 	*entry = *ext2_entry;
 
 
@@ -324,9 +317,9 @@ int fs_read_dir(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_
 		release_entry_list(list);
 
 	shell_entry_to_ext2_entry(parent, &entry);
-	printf("before reading directory \n");
+	
 	ext2_read_dir(&entry, adder, list);
-    printf("after reading directory \n");
+   
 	return EXT2_SUCCESS;
 }
 
@@ -387,12 +380,11 @@ int fs_mkdir(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENT
 
 	if (is_exist(disk, fsOprs, parent, name))
 		return EXT2_ERROR;
-    printf("after exist\n");
+ 
 	shell_entry_to_ext2_entry(parent, &EXT2_Parent);
 
 	result = ext2_mkdir(&EXT2_Parent, name, &EXT2_Entry);
-         printf("after ext2_mkdir\n");
-		 printf("result %d\n",EXT2_Entry.entry.inode);
+   
 	ext2_entry_to_shell_entry(ext2, &EXT2_Entry, retEntry);
 
 	return result;
