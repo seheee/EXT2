@@ -251,7 +251,9 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 {
 	EXT2_NODE* entry = (EXT2_NODE*)shell_entry->pdata;
 	INODE inodeBuffer;
-	BYTE* str = "/";
+	//BYTE* str = "/";
+	BYTE str [MAX_NAME_LENGTH];
+	str[0]="/";
 
 	ZeroMemory(shell_entry, sizeof(SHELL_ENTRY));
 
@@ -265,12 +267,13 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 	if (ext2_entry->entry.name[0] != '.' && inode == 2);
 	else {
 		printf("1\n");
-		str = shell_entry->name;
+		*str = shell_entry->name;
 		 printf("ddfsf \n");
-		str = my_strncpy(str, ext2_entry->entry.name, 8);
+		memcpy(&str[1], ext2_entry->entry.name, MAX_NAME_LENGTH);
 
-		 printf("ddfsf \n");
-	/*	if (ext2_entry->entry.name[8] != 0x20)
+		 printf("str : %s\n", str);
+		 printf("ext2_entry->entry.name; : %s\n", ext2_entry->entry.name);
+		/*if (ext2_entry->entry.name[8] != 0x20)
 		{    printf("ddfsf \n");
 
 			str = my_strncpy(str, ".", 1);
@@ -323,7 +326,7 @@ int fs_read_dir(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_
 	shell_entry_to_ext2_entry(parent, &entry);
 	printf("before reading directory \n");
 	ext2_read_dir(&entry, adder, list);
-          printf("after reading directory \n");
+    printf("after reading directory \n");
 	return EXT2_SUCCESS;
 }
 

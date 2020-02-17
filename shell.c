@@ -558,7 +558,7 @@ int shell_cmd_cat(int argc, char* argv[])
 
 int shell_cmd_ls(int argc, char* argv[])
 {
-	SHELL_ENTRY_LIST		list;
+	SHELL_ENTRY_LIST		list = {0, };
 	SHELL_ENTRY_LIST_ITEM*	current;
 
 	if (argc > 2)
