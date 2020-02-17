@@ -181,7 +181,7 @@ int fs_mount(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* ro
 	printf("%d\n", result);
 	printf("%s\n", ext2_entry.entry.name);
 	ext2_entry_to_shell_entry(fs, &ext2_entry, root);
-	 printf("%d\n",root->isDirectory);
+	
 	return result;
 }
 void fs_umount(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs)
@@ -372,7 +372,7 @@ int fs_mkdir(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENT
 	shell_entry_to_ext2_entry(parent, &EXT2_Parent);
 
 	result = ext2_mkdir(&EXT2_Parent, name, &EXT2_Entry);
-
+         printf("after ext2_mkdir\n");
 	ext2_entry_to_shell_entry(ext2, &EXT2_Entry, retEntry);
 
 	return result;

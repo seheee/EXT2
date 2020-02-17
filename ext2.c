@@ -343,7 +343,6 @@ int create_root(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK * sb)
 
 
 	return EXT2_SUCCESS ;*/
-
 	BYTE   sector[MAX_SECTOR_SIZE];
 	SECTOR   rootSector = 0;
 	EXT2_DIR_ENTRY * entry;
@@ -416,8 +415,9 @@ int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 	EXT2_NODE * entry;
 	EXT2_NODE * entryNoMore;
 	char sector[MAX_SECTOR_SIZE];
+	char sector2[MAX_SECTOR_SIZE];
 	EXT2_DIR_ENTRY* ent = (EXT2_DIR_ENTRY*) sector;
-
+    entry= (EXT2_NODE *)sector2;
 	entryName[0] = DIR_ENTRY_FREE;
 	printf("before entry \n");
 	// free 디렉터리 엔트리를 찾은 경우
@@ -606,6 +606,8 @@ int format_name(EXT2_FILESYSTEM* fs, char* name)
 int lookup_entry(EXT2_FILESYSTEM* fs, const int inode, const char* name, EXT2_NODE* retEntry)
 {
 	INODE* inodeStruct;
+	char sector[MAX_SECTOR_SIZE];
+	inodeStruct = (INODE *)sector ;
           printf("지금 lookup_entry안에 들어와있어요\n");
 		  printf("%d      %s\n",inode,name);
 	if(get_inode(fs, inode, inodeStruct))
@@ -616,6 +618,8 @@ int lookup_entry(EXT2_FILESYSTEM* fs, const int inode, const char* name, EXT2_NO
 	if(inode == 2)
 	{
 		return find_entry_on_root(fs, *inodeStruct, name, retEntry);
+		printf("retEntry : %d\n",retEntry->entry.inode);
+		printf("ddddfsf\n");
 	}
 	else
 	{
@@ -680,27 +684,30 @@ int find_entry_on_root(EXT2_FILESYSTEM* fs, INODE inode, char* formattedName, EX
 	char sector[MAX_SECTOR_SIZE];
 	EXT2_DIR_ENTRY* entry;
 	UINT32 number;
-
 	read_root_sector(fs, sector);
 	entry = (EXT2_DIR_ENTRY*) sector;
+	char sector2[MAX_SECTOR_SIZE];
 	
 	UINT32 entry_cnt_per_block = MAX_BLOCK_SIZE/sizeof(EXT2_DIR_ENTRY);
 	UINT32 last = entry_cnt_per_block - 1;
 	 
 	UINT32 result = find_entry_at_sector(sector, formattedName, 0, last, &number);
-
+      printf("after find_entry_at_sector\n");
+	  printf("entry result: %d\n",result);
 	if(result == -1 || result == -2)
 	{
 		return EXT2_ERROR;
 	}
 	else
-	{
+	{  ZeroMemory(sector,sizeof(sector));
+		ret= (EXT2_NODE *)sector2;
+	
 		memcpy(&ret->entry, &entry[number], sizeof(EXT2_DIR_ENTRY));
+     
 		ret->fs = fs;
 		ret->location.block = 17;
 		ret->location.group = 0;
-		ret->location.offset = number;
-
+		ret->location.offset = number;  
 		return EXT2_SUCCESS;
 	}
 
@@ -761,15 +768,14 @@ int find_entry_on_data(EXT2_FILESYSTEM* fs, INODE first, const BYTE* formattedNa
 
 
 int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
-{   
+{    printf("get inode 진입 0\n");
      
 	EXT2_GROUP_DESCRIPTOR* gd2;
 	char sector[MAX_SECTOR_SIZE];
 	ZeroMemory(sector,sizeof(sector));
-
 	fs->disk->read_sector(fs->disk, 2, sector) ;  
+	
     gd2 = (EXT2_GROUP_DESCRIPTOR *) sector;
-
 	UINT32 inode_group = (inode-1)/fs->sb.inode_per_group; // 몇번째 group인지 
 
 	if(inode_group > 0)
@@ -779,7 +785,7 @@ int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
 			gd2++ ;
 		}  
 	}
-
+ 
 	memcpy(&fs->gd, gd2, sizeof(EXT2_GROUP_DESCRIPTOR));
       
 	UINT32 inode_structure_size = fs->sb.inode_structure_size; // inode 크기 
@@ -793,12 +799,14 @@ int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
     ZeroMemory(sector,MAX_SECTOR_SIZE);
        
 	INODE* inode_table;
+
 	inode_table = (INODE*)sector;
 	fs->disk->read_sector(fs->disk, 1+(inode_group*fs->sb.block_per_group)+inode_start_block+inode_sector, sector);
      for(int i=1; i<(inode_offset %8); i++)
            inode_table ++;
-           
+           printf("여기인가보오 \n");
 		   *inodeBuffer = *inode_table;  	
+		    printf("get inode 진입 1\n");
 	return EXT2_SUCCESS;
 }
 
@@ -814,7 +822,7 @@ int read_root_sector(EXT2_FILESYSTEM* fs, BYTE* sector)
 	root=	get_data_block_at_inode(fs,inodeBuffer);
 	printf("block number : %d\n", root[0]);
 	data_read(fs, 0, root[0], sector);
-
+   
   	
 	
 
@@ -1100,6 +1108,7 @@ int ext2_read_dir(EXT2_NODE* dir, EXT2_NODE_ADD adder, void* list)
 	EXT2_DIR_ENTRY_LOCATION location ;
 	int entriesPerSector = (MAX_SECTOR_SIZE/sizeof(EXT2_DIR_ENTRY));
 	INODE* inodeBuffer; 
+	inodeBuffer = (INODE *)sector ;
 		printf("%d\n",dir->entry.inode);
 	get_inode(dir->fs,dir->entry.inode,inodeBuffer);
 	printf("%d\n",dir->entry.inode);
@@ -1207,6 +1216,8 @@ EXT2_GROUP_DESCRIPTOR * gd_buffer;
 int gd_group =0;
 int gd_temp =0; // 몇번째 그룹디스크립터에 넣을건지 보관할곳 
 BYTE sector[MAX_SECTOR_SIZE];
+BYTE sector2[MAX_SECTOR_SIZE];
+retEntry =(EXT2_NODE *)sector2;
 QWORD sector_num_per_group = (parent->fs->disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;   // 그룹당 블록의 갯수 
  BYTE name[MAX_ENTRY_NAME_LENGTH];
  strncpy(name,entryName,MAX_NAME_LENGTH);
