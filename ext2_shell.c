@@ -256,28 +256,36 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 	ZeroMemory(shell_entry, sizeof(SHELL_ENTRY));
 
 	int inode = ext2_entry->entry.inode;
+	printf("inode : %d\n", inode);
 	int result = get_inode(fs, inode, &inodeBuffer);
+	printf("get_inode 끝\n");
+	printf("inodeBuffer.mode : %x\n", inodeBuffer.mode);
 
 	if (ext2_entry->entry.name[0] != '.' && inode == 2);
 	else {
+		printf("1\n");
 		str = shell_entry->name;
 		str = my_strncpy(str, ext2_entry->entry.name, 8);
 		if (ext2_entry->entry.name[8] != 0x20)
 		{
+			printf("2\n");
 			str = my_strncpy(str, ".", 1);
 			str = my_strncpy(str, &ext2_entry->entry.name[8], 3);
 		}
 	}
 	if (FILE_TYPE_DIR & inodeBuffer.mode)
-		shell_entry->isDirectory = 1;
+	{	printf("3\n");
+		shell_entry->isDirectory = 1;}
 	else
-		shell_entry->isDirectory = 0;
+	{	printf("4\n");
+		shell_entry->isDirectory = 0;}
 
 	shell_entry->permition = 0x01FF & inodeBuffer.mode;
 
 	shell_entry->size = inodeBuffer.size;
 
 	*entry = *ext2_entry;
+
 
 	return EXT2_SUCCESS;
 }

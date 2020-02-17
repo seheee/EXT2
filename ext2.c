@@ -519,7 +519,8 @@ int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 			
 			data_read(entry.fs, entry.location.group, entry.location.block, sector);
 			printf("새로운 엔트리 추가 끝1\n");
-			ent[entry.location.offset] = retEntry->entry;
+			//ent[entry.location.offset] = retEntry->entry;
+			memcpy(&ent[entry.location.offset], &retEntry->entry, sizeof(EXT2_DIR_ENTRY));
 			printf("새로운 엔트리 추가 끝2\n");
 			data_write(entry.fs, entry.location.group, entry.location.block, sector);
 			printf("새로운 엔트리 추가 끝3\n");
@@ -527,6 +528,7 @@ int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 
 			printf("새로운 엔트리 추가 끝4\n");
 			entry.location.offset++;
+			
 
 			if(entry.location.offset == (MAX_BLOCK_SIZE/sizeof(EXT2_DIR_ENTRY)))
 			{
@@ -543,6 +545,14 @@ int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 
 				}
 			}
+			else
+			{
+				data_read(entry.fs, entry.location.group, entry.location.block, sector );
+				ent[entry.location.offset].name[0] =DIR_ENTRY_NO_MORE;
+				data_write(entry.fs, entry.location.group, entry.location.block, sector);
+
+			}
+			
 		}
 
 		
@@ -904,14 +914,13 @@ int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
 			printf("get_inode_6\n");
 		}  
 	}
-
-printf("get_inode_7\n");
+	printf("get_inode_7\n");
 
 	memcpy(&fs->gd, gd2, sizeof(EXT2_GROUP_DESCRIPTOR));
-      printf("get_inode_8\n");
+    printf("get_inode_8\n");
 	UINT32 inode_structure_size = fs->sb.inode_structure_size; // inode 크기 
 	UINT32 inode_start_block = fs->gd.start_block_of_inode_table; // inode 테이블의 시작 블록 
-printf("get_inode_9\n");
+	printf("get_inode_9\n");
 	UINT32 inode_offset = inode % (fs->sb.inode_per_group+1); // 그룹내의 inode table에서 몇번째인지 
 	UINT32 inode_sector = (inode_offset*inode_structure_size)/(MAX_SECTOR_SIZE);
 	//해당 inode 블럭 
@@ -927,27 +936,24 @@ printf("get_inode_9\n");
 	printf("1\n");
 
 	// for문 안써도 됨. offset 계산해서 더해주면 됨
-     for(int i=1; i<(inode_offset %8); i++)
-           inode_table ++;
-
-           printf("1\n");
-		   *inodeBuffer = *inode_table;  	
-		   printf("1\n");
+	memcpy(inodeBuffer, &inode_table[inode_offset%8], sizeof(INODE));
 
 	return EXT2_SUCCESS;
 }
 
 int read_root_sector(EXT2_FILESYSTEM* fs, BYTE* sector)
 {    
-	BYTE sector2[MAX_SECTOR_SIZE];
-	INODE  *inodeBuffer ;
-	inodeBuffer=(INODE *)sector2;
+	//BYTE sector2[MAX_SECTOR_SIZE];
+	//INODE  *inodeBuffer ;
+	//inodeBuffer=(INODE *)sector2;
+
+	INODE inodeBuffer = {0, };
     int * root ;
 	printf("2\n");
-	get_inode(fs,2,inodeBuffer);
-	printf("inodeBuffer blocks = %d\n", inodeBuffer->blocks);
+	get_inode(fs,2,&inodeBuffer);
+	printf("inodeBuffer blocks = %d\n", inodeBuffer.blocks);
 
-	root=	get_data_block_at_inode(fs,inodeBuffer);
+	root=	get_data_block_at_inode(fs,&inodeBuffer);
 	printf("block number : %d\n", root[0]);
 	data_read(fs, 0, root[0], sector);
 
@@ -1002,6 +1008,19 @@ int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry)
 	parent->fs->disk->read_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
 	write_bitmap(retEntry->entry.inode-1, 1, sector);
 	parent->fs->disk->write_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
+
+	// inode
+	INODE inode = {0, };
+  	inode.mode= 0x8000;
+  	if(set_inode_onto_inode_table(parent->fs,retEntry->entry.inode,&inode))
+  		return EXT2_ERROR;     
+	printf("set_inode_onto_~~끝\n");
+
+	// super block
+	parent->fs->sb.free_inode_count--;
+
+	// group descriptor
+	parent->fs->gd.free_inodes_count--;
 
 	printf("insert_entry 호출 전\n");
 	printf("retEntry->entry.name : %s\n", retEntry->entry.name);
@@ -1204,10 +1223,7 @@ int set_inode_onto_inode_table(EXT2_FILESYSTEM *fs, const UINT32 which_inode_num
 	fs->disk->read_sector(fs->disk, 2, sector) ;  
     gd2 = (EXT2_GROUP_DESCRIPTOR *) sector;
 	UINT32 inode_group = (which_inode_num_to_write-1)/fs->sb.inode_per_group; // 몇번째 inode group인지 
-	for  ( int i=0 ; i<inode_group; i++)
-	  { gd2++ ;}  
-    fs->gd= *gd2;
-      
+
 	UINT32 inode_structure_size = fs->sb.inode_structure_size; // inode 크기 
 	UINT32 inode_start_block = fs->gd.start_block_of_inode_table; // inode 테이블의 시작 블록 
 
@@ -1218,9 +1234,11 @@ int set_inode_onto_inode_table(EXT2_FILESYSTEM *fs, const UINT32 which_inode_num
 	INODE* inode_table;
 	inode_table = (INODE*)sector;
 
-	fs->disk->read_sector(fs->disk, inode_start_block + inode_sector, sector);
-      inode_table[inode_offset%8] = *inode_to_write ;             
-     fs->disk->write_sector(fs->disk, inode_start_block+inode_sector,sector);
+	fs->disk->read_sector(fs->disk, 1+(inode_group*fs->sb.block_per_group)+inode_start_block + inode_sector, sector);
+      //inode_table[inode_offset%8] = *inode_to_write ;   
+	  memcpy(&inode_table[inode_offset%8], inode_to_write, sizeof(INODE));          
+     fs->disk->write_sector(fs->disk, 1+(inode_group*fs->sb.block_per_group)+inode_start_block+inode_sector,sector);
+	 printf("inode_table[inode_offset%8].mode : %x\n", inode_table[inode_offset%8].mode);
 	return EXT2_SUCCESS;
 
 
