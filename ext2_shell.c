@@ -256,17 +256,23 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 	ZeroMemory(shell_entry, sizeof(SHELL_ENTRY));
 
 	int inode = ext2_entry->entry.inode;
+	printf("inode : %d\n", inode);
 	int result = get_inode(fs, inode, &inodeBuffer);
+
         printf("ddfsf \n");
 		printf(" %s \n",ext2_entry->entry.name);
+
 	if (ext2_entry->entry.name[0] != '.' && inode == 2);
 	else {
+		printf("1\n");
 		str = shell_entry->name;
 		 printf("ddfsf \n");
 		str = my_strncpy(str, ext2_entry->entry.name, 8);
+
 		 printf("ddfsf \n");
 	/*	if (ext2_entry->entry.name[8] != 0x20)
 		{    printf("ddfsf \n");
+
 			str = my_strncpy(str, ".", 1);
 			  printf("ddfsfrf \n");
 			str = my_strncpy(str, &ext2_entry->entry.name[8], 3);
@@ -275,15 +281,19 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 	}
 	 printf("ddfsf \n");
 	if (FILE_TYPE_DIR & inodeBuffer.mode)
-		shell_entry->isDirectory = 1;
+	{	printf("3\n");
+		shell_entry->isDirectory = 1;}
 	else
+
 		shell_entry->isDirectory = 0;
  printf("ddfsf \n");
+
 	shell_entry->permition = 0x01FF & inodeBuffer.mode;
 
 	shell_entry->size = inodeBuffer.size;
  printf("ddfsf \n");
 	*entry = *ext2_entry;
+
 
 	return EXT2_SUCCESS;
 }
