@@ -250,7 +250,7 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 	INODE inodeBuffer;
 	//BYTE* str = "/";
 	BYTE str [MAX_NAME_LENGTH];
-	str[0]="/";
+	str[0]='/';
 
 	ZeroMemory(shell_entry, sizeof(SHELL_ENTRY));
 
@@ -260,11 +260,13 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 
 	if (ext2_entry->entry.name[0] != '.' && inode == 2);
 	else {
-	
-		*str = shell_entry->name;
-		 
-		memcpy(&str[1], ext2_entry->entry.name, MAX_NAME_LENGTH);
 
+		 
+		memcpy(&str[1], ext2_entry->entry.name, MAX_NAME_LENGTH-1);
+		printf("str : %s\n", str);
+
+		memcpy(shell_entry->name, str, MAX_NAME_LENGTH);
+		//shell_entry->name = *str;
 		/*if (ext2_entry->entry.name[8] != 0x20)
 		{    printf("ddfsf \n");
 

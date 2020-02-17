@@ -1248,7 +1248,7 @@ int read_dir_from_sector(EXT2_FILESYSTEM* fs, BYTE* sector, EXT2_NODE_ADD adder,
 {     
 	int  entriesPerSector;
     EXT2_DIR_ENTRY * dir;
-	EXT2_NODE  node ;
+	EXT2_NODE  node={0, } ;
 	dir= (EXT2_DIR_ENTRY *)sector ;
 	int i;
 	int inodeOffset ,inodeGroup ;
@@ -1270,7 +1270,7 @@ int read_dir_from_sector(EXT2_FILESYSTEM* fs, BYTE* sector, EXT2_NODE_ADD adder,
 			node.fs = fs;
 			node.entry=*dir;
 			node.location.offset =i; 
-			adder(fs,list,&node);
+			adder(fs,list,&node);	
 		}
 		dir ++;
 	}
