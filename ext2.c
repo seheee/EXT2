@@ -1318,7 +1318,7 @@ int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEnt
 	int inodenumber;
 	EXT2_GROUP_DESCRIPTOR * gd_buffer;
 	int gd_group =0;
-	int gd_temp =0; // 몇번째 그룹디스크립터에 넣을건지 보관할곳 
+	EXT2_GROUP_DESCRIPTOR  gd_temp ; // 몇번째 그룹디스크립터에 넣을건지 보관할곳 
 	BYTE sector[MAX_SECTOR_SIZE];
 	BYTE sector2[MAX_SECTOR_SIZE];
 	BYTE sector3[MAX_SECTOR_SIZE]; 
@@ -1335,22 +1335,22 @@ int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEnt
 
  	parent->fs->disk->read_sector(parent->fs->disk,2,sector); // 그룹 디스크립터 읽는다 
  	gd_buffer = (EXT2_GROUP_DESCRIPTOR *)sector ;
- 	gd_temp = gd_buffer->free_inodes_count ;
+ 	gd_temp = *gd_buffer ;
 
 	for(int i=0 ; i<NUMBER_OF_GROUPS; i++)   // 빈 아이노드 찾는 과정 
 	{
-		if(gd_temp<gd_buffer->free_inodes_count)
+		if(gd_temp.free_inodes_count<gd_buffer->free_inodes_count)
 		{  
 			gd_group=i ;
-			gd_temp= gd_buffer->free_inodes_count; 
+			gd_temp= *gd_buffer; 
 		}
 		gd_buffer ++;
 	}
 
 	retEntry->fs=parent->fs;
-	retEntry->fs->gd = *gd_buffer ;  // 그룹 디스크립터 채워주기 
+	retEntry->fs->gd = gd_temp ;  // 그룹 디스크립터 채워주기 
 	
-	insert_entry(parent->entry.inode,retEntry);  // 새로운 ext2노드 넣는거 
+	
 	//아이노드 에 넣는다 
 	
 	inode =(INODE *)sector3;
@@ -1361,9 +1361,9 @@ int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEnt
 
 	inodenumber = get_free_inode_number(parent->fs,gd_group);  // 해당 아이노드 넘버 찾고 
 	retEntry->entry.inode = inodenumber;
-
+    insert_entry(parent->entry.inode,retEntry);  // 새로운 ext2노드 넣는거 
 	inode->block[0]= get_available_data_block(parent->fs,inodenumber);
-
+     printf("inode number %d \n",inodenumber);
 	if(set_inode_onto_inode_table(parent->fs,inodenumber,inode))
 		return EXT2_ERROR;      // 아이노드 채워줌 
 	
@@ -1393,7 +1393,7 @@ int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEnt
 	dotNode->entry.name[0]="."; // 현재 디렉토리 
 	dotNode->fs = retEntry->fs ;
 	dotNode->entry=retEntry->entry;
-	insert_entry(inodenumber,dotNode);
+	//insert_entry(inodenumber,dotNode);
 
 	dotdotNode =(EXT2_NODE *)sector3;
 	ZeroMemory(dotdotNode,sizeof(EXT2_NODE));
@@ -1402,7 +1402,7 @@ int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEnt
 	dotdotNode->entry.name[1]=".";
 	dotdotNode->fs = parent->fs ;
 	dotdotNode->entry=parent->entry;
-	insert_entry(inodenumber,dotdotNode);
+	//insert_entry(inodenumber,dotdotNode);
 
 	return EXT2_SUCCESS ;
 
