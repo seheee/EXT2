@@ -482,6 +482,7 @@ void process_meta_data_for_inode_used(EXT2_NODE * retEntry, UINT32 inode_num, in
 
 int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 {
+	printf("inode Num : %d\n", inode_num);
 	BYTE entryName[2] = {0, };
     
 	EXT2_NODE entry = {0, };
@@ -504,7 +505,7 @@ int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 	{
 		entryName[0] = DIR_ENTRY_NO_MORE;
 	
-		if(lookup_entry(retEntry->fs, 2, entryName, &entry) == EXT2_SUCCESS)
+		if(lookup_entry(retEntry->fs, inode_num, entryName, &entry) == EXT2_SUCCESS)
 		{
 
 			// DIR_ENTRY_NO_MORE위치에 새로운 entry 추가
@@ -1287,6 +1288,10 @@ char* my_strncpy(char* dest, const char* src, int length)
 }
 int write_bitmap(int number, int set, BYTE * sector)// 아이노드 비트맵을 쓸때는 number에다가 1빼주자 
 {
+	if(number >= 100)
+	{
+		number -= 100;
+	}
     int offset = number / 8 ;
 	int offset2 = number %8 ;
 
@@ -1382,27 +1387,34 @@ int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEnt
 	write_bitmap(inode->block[0],1,sector);
 	parent->fs->disk->write_sector(parent->fs->disk,1+sector_num_per_group*group+2,sector);
 	
-	parent->fs->disk->read_sector(parent->fs->disk,1+sector_num_per_group*group+3,sector);// 아이노드 비트맵 고치기
+	/*parent->fs->disk->read_sector(parent->fs->disk,1+sector_num_per_group*group+3,sector);// 아이노드 비트맵 고치기
 	write_bitmap(inodenumber-1,1,sector);
-	parent->fs->disk->write_sector(parent->fs->disk,1+sector_num_per_group*group+3,sector);   
-	
+	parent->fs->disk->write_sector(parent->fs->disk,1+sector_num_per_group*group+3,sector);   */
+	ZeroMemory(sector,sizeof(sector));
+	parent->fs->disk->read_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
+	write_bitmap(retEntry->entry.inode-1, 1, sector);
+	parent->fs->disk->write_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
+
+
 	dotNode =(EXT2_NODE *)sector3;
 	ZeroMemory(dotNode,sizeof(EXT2_NODE));
 
 	memset(dotNode->entry.name,0x20,MAX_ENTRY_NAME_LENGTH);
-	dotNode->entry.name[0]="."; // 현재 디렉토리 
+	dotNode->entry.name[0]='.'; // 현재 디렉토리 
+	printf("dotNode Name : %s\n", dotNode->entry.name);
 	dotNode->fs = retEntry->fs ;
 	dotNode->entry=retEntry->entry;
-	//insert_entry(inodenumber,dotNode);
+	insert_entry(inodenumber,dotNode);
 
 	dotdotNode =(EXT2_NODE *)sector3;
 	ZeroMemory(dotdotNode,sizeof(EXT2_NODE));
 	memset(dotNode->entry.name,0x20,MAX_ENTRY_NAME_LENGTH);
-	dotdotNode->entry.name[0]=".";  // 상위 디렉토리 
-	dotdotNode->entry.name[1]=".";
+	dotdotNode->entry.name[0]='.';  // 상위 디렉토리 
+	dotdotNode->entry.name[1]='.';
+	printf("dotdotNode Name : %s\n", dotNode->entry.name);
 	dotdotNode->fs = parent->fs ;
 	dotdotNode->entry=parent->entry;
-	//insert_entry(inodenumber,dotdotNode);
+	insert_entry(inodenumber,dotdotNode);
 
 	return EXT2_SUCCESS ;
 
