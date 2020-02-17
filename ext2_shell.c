@@ -263,7 +263,6 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 
 		 
 		memcpy(&str[1], ext2_entry->entry.name, MAX_NAME_LENGTH-1);
-		printf("str : %s\n", str);
 
 		memcpy(shell_entry->name, str, MAX_NAME_LENGTH);
 		//shell_entry->name = *str;
