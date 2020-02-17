@@ -258,32 +258,40 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 	int inode = ext2_entry->entry.inode;
 	printf("inode : %d\n", inode);
 	int result = get_inode(fs, inode, &inodeBuffer);
-	printf("get_inode 끝\n");
-	printf("inodeBuffer.mode : %x\n", inodeBuffer.mode);
+
+        printf("ddfsf \n");
+		printf(" %s \n",ext2_entry->entry.name);
 
 	if (ext2_entry->entry.name[0] != '.' && inode == 2);
 	else {
 		printf("1\n");
 		str = shell_entry->name;
+		 printf("ddfsf \n");
 		str = my_strncpy(str, ext2_entry->entry.name, 8);
-		if (ext2_entry->entry.name[8] != 0x20)
-		{
-			printf("2\n");
+
+		 printf("ddfsf \n");
+	/*	if (ext2_entry->entry.name[8] != 0x20)
+		{    printf("ddfsf \n");
+
 			str = my_strncpy(str, ".", 1);
+			  printf("ddfsfrf \n");
 			str = my_strncpy(str, &ext2_entry->entry.name[8], 3);
-		}
+			  printf("ddfsf \n");
+		}   */
 	}
+	 printf("ddfsf \n");
 	if (FILE_TYPE_DIR & inodeBuffer.mode)
 	{	printf("3\n");
 		shell_entry->isDirectory = 1;}
 	else
-	{	printf("4\n");
-		shell_entry->isDirectory = 0;}
+
+		shell_entry->isDirectory = 0;
+ printf("ddfsf \n");
 
 	shell_entry->permition = 0x01FF & inodeBuffer.mode;
 
 	shell_entry->size = inodeBuffer.size;
-
+ printf("ddfsf \n");
 	*entry = *ext2_entry;
 
 
@@ -381,6 +389,7 @@ int fs_mkdir(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENT
 
 	result = ext2_mkdir(&EXT2_Parent, name, &EXT2_Entry);
          printf("after ext2_mkdir\n");
+		 printf("result %d\n",EXT2_Entry.entry.inode);
 	ext2_entry_to_shell_entry(ext2, &EXT2_Entry, retEntry);
 
 	return result;
