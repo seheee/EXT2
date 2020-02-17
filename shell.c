@@ -468,7 +468,7 @@ int shell_cmd_mkdir(int argc, char* argv[])
 	}
 
 	result = g_fsOprs.mkdir(&g_disk, &g_fsOprs, &g_currentDir, argv[1], &entry);
-           printf("  last result:%d",result);
+       
 	if (result)
 	{
 		printf("cannot create directory\n");
