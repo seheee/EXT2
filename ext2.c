@@ -554,7 +554,32 @@ int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 }
 
 UINT32 get_available_data_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
-{
+{       
+
+	BYTE sector[MAX_SECTOR_SIZE];
+    UINT32 inode_group = (inode_num-1)/fs->sb.inode_per_group ;
+	printf("inode_num :%d\n");
+	int used_blocks =0; 
+
+		fs->disk->read_sector(fs->disk, 1+inode_group*fs->sb.block_per_group+2, sector);
+	 for(int i = 0; i < MAX_SECTOR_SIZE; i++)
+		{
+			for(int j = 0; j < 8; j++)
+			{
+				
+				if(!((unsigned char)sector[i] >> j)^0)
+				{
+					break;
+				}
+				used_blocks ++;			
+			}
+		}
+
+
+
+
+       return used_blocks;
+
 }
  
 // data block
@@ -706,6 +731,8 @@ int lookup_entry(EXT2_FILESYSTEM* fs, const int inode, const char* name, EXT2_NO
 	{
 		return EXT2_ERROR;
 	}
+	
+	printf("아이노드 번호: %d",inodeStruct->block[0]);
     printf("아이노드는 찾았어요\n");
 	printf("inodeStruct blocks : %d\n", inodeStruct->blocks);
 	if(inode == 2)
@@ -715,7 +742,7 @@ int lookup_entry(EXT2_FILESYSTEM* fs, const int inode, const char* name, EXT2_NO
 		printf("ddddfsf\n");
 	}
 	else
-	{
+	{      
 		return find_entry_on_data(fs, *inodeStruct, name, retEntry, inode);
 	}
 	
@@ -835,15 +862,18 @@ int find_entry_on_data(EXT2_FILESYSTEM* fs, INODE first, const BYTE* formattedNa
 
 	UINT32 entry_cnt_per_block = MAX_BLOCK_SIZE/sizeof(EXT2_DIR_ENTRY);
 	UINT32 last = entry_cnt_per_block - 1;
-
+     printf("hello world\n");
 	blockNumArr = get_data_block_at_inode(fs, &first);
+	printf("hello world\n");
 	for(i = 0; i < sizeof(blockNumArr)/sizeof(int); i++)
-	{
+	{   printf("hello world\n");
+	    printf("%d\n",blockNumArr[i]);
 		data_read(fs, group, blockNumArr[i], sector);
+	    printf("hello world\n");
 		entry = (EXT2_DIR_ENTRY*) sector;
-
+        printf("hello world\n");
 		UINT32 result = find_entry_at_sector(sector, formattedName, 0, last, &number);
-
+       printf("hello world\n");
 		// 못찾은 경우
 		if(result == -1)
 		{
@@ -901,7 +931,7 @@ int get_inode(EXT2_FILESYSTEM * fs, const UINT32 inode, INODE *inodeBuffer)
 		for  ( int i=0 ; i<inode_group; i++)
 	  	{ 
 			gd2++ ;
-			printf("get_inode_6\n");
+			//printf("get_inode_6\n");
 		}  
 	}
 
@@ -1202,25 +1232,26 @@ int set_inode_onto_inode_table(EXT2_FILESYSTEM *fs, const UINT32 which_inode_num
 	BYTE sector[MAX_SECTOR_SIZE];
 	ZeroMemory(sector,MAX_SECTOR_SIZE);
 	fs->disk->read_sector(fs->disk, 2, sector) ;  
-    gd2 = (EXT2_GROUP_DESCRIPTOR *) sector;
-	UINT32 inode_group = (which_inode_num_to_write-1)/fs->sb.inode_per_group; // 몇번째 inode group인지 
-	for  ( int i=0 ; i<inode_group; i++)
-	  { gd2++ ;}  
-    fs->gd= *gd2;
-      
+   
+    UINT32 inode_group = (which_inode_num_to_write-1)/fs->sb.inode_per_group ;  
+	 printf("inode group %d",inode_group);  
 	UINT32 inode_structure_size = fs->sb.inode_structure_size; // inode 크기 
 	UINT32 inode_start_block = fs->gd.start_block_of_inode_table; // inode 테이블의 시작 블록 
-
+             printf("inode_start_block: %d",inode_start_block);
+			 printf("ddd %d",fs->sb.block_per_group);
+			printf("the number : %d\n",which_inode_num_to_write);
 	UINT32 inode_offset = which_inode_num_to_write % (fs->sb.inode_per_group+1); // 그룹내의 inode table에서 몇번째인지 
+	printf("offset %d",inode_offset);
 	UINT32 inode_sector = (inode_offset*inode_structure_size)/(MAX_SECTOR_SIZE);
 	//해당 inode 블럭 
+	printf("dddd %d\n",inode_sector);
     ZeroMemory(sector,MAX_SECTOR_SIZE);
 	INODE* inode_table;
 	inode_table = (INODE*)sector;
-
-	fs->disk->read_sector(fs->disk, inode_start_block + inode_sector, sector);
+         
+	fs->disk->read_sector(fs->disk, 1+4+(inode_group*  fs->sb.block_per_group) + inode_sector, sector);
       inode_table[inode_offset%8] = *inode_to_write ;             
-     fs->disk->write_sector(fs->disk, inode_start_block+inode_sector,sector);
+     fs->disk->write_sector(fs->disk, 1+4+(inode_group* fs->sb.block_per_group)+inode_sector,sector);    
 	return EXT2_SUCCESS;
 
 
@@ -1359,7 +1390,7 @@ int gd_group =0;
 int gd_temp =0; // 몇번째 그룹디스크립터에 넣을건지 보관할곳 
 BYTE sector[MAX_SECTOR_SIZE];
 BYTE sector2[MAX_SECTOR_SIZE];
-retEntry =(EXT2_NODE *)sector2;
+BYTE sector3[MAX_SECTOR_SIZE]; 
 QWORD sector_num_per_group = (parent->fs->disk->numberOfSectors - 1) / NUMBER_OF_GROUPS;   // 그룹당 블록의 갯수 
  BYTE name[MAX_ENTRY_NAME_LENGTH];
  strncpy(name,entryName,MAX_NAME_LENGTH);
@@ -1384,33 +1415,49 @@ QWORD sector_num_per_group = (parent->fs->disk->numberOfSectors - 1) / NUMBER_OF
  insert_entry(parent->entry.inode,retEntry);  // 새로운 ext2노드 넣는거 
  //아이노드 에 넣는다 
  printf("지금 들어와있습니당4\n");
+ inode =(INODE *)sector3;
   ZeroMemory(inode,sizeof(INODE));
+   printf("지금 들어와있습니당4\n");
   inode->mode= 0x4000;
   inode->blocks=1;
   inodenumber = get_free_inode_number(parent->fs,gd_group);  // 해당 아이노드 넘버 찾고 
+   printf("지금 들어와있습니당5\n");
   retEntry->entry.inode = inodenumber;
   inode->block[0]= get_available_data_block(parent->fs,inodenumber);
-  if(set_inode_onto_inode_table(parent->fs,inodenumber,inode))
+  printf(" get available_data_block :%d\n", inode->block[0]);
+ 
+ if(set_inode_onto_inode_table(parent->fs,inodenumber,inode))
   return EXT2_ERROR;      // 아이노드 채워줌 
+  
   parent->fs->sb.free_block_count --;
   parent->fs->sb.free_inode_count --; // 슈퍼블록 내용 수정 
   retEntry->fs->gd.free_blocks_count --;
   retEntry->fs->gd.free_inodes_count --;
   retEntry ->fs->gd.directories_count ++; // 디렉토리 늘었으니까 그룹 디스크립터 내용 수정 
   group = inodenumber/(parent->fs->sb.inode_per_group);
+
+  printf("지금 들어와있습니당6\n");
   // 블록 비트맵과 아이노드 비트맵 수정 
-  parent->fs->disk->read_sector(parent->fs,1+sector_num_per_group*group+2,sector);
+  ZeroMemory(sector,sizeof(sector));
+  parent->fs->disk->read_sector(parent->fs->disk,1+sector_num_per_group*group+2,sector);
+    printf("지금 들어와있습니당6\n");
         write_bitmap(inode->block[0],1,sector);
-  parent->fs->disk->write_sector(parent->fs,1+sector_num_per_group*group+2,sector);
-   parent->fs->disk->read_sector(parent->fs,1+sector_num_per_group*group+3,sector);// 아이노드 비트맵 고치기
+  printf("지금 들어와있습니당7\n");		
+  parent->fs->disk->write_sector(parent->fs->disk,1+sector_num_per_group*group+2,sector);
+   parent->fs->disk->read_sector(parent->fs->disk,1+sector_num_per_group*group+3,sector);// 아이노드 비트맵 고치기
         write_bitmap(inodenumber-1,1,sector);
-  parent->fs->disk->write_sector(parent->fs,1+sector_num_per_group*group+3,sector);
+		  printf("지금 들어와있습니당8\n");
+  parent->fs->disk->write_sector(parent->fs->disk,1+sector_num_per_group*group+3,sector);   
+  dotNode =(EXT2_NODE *)sector3;
 ZeroMemory(dotNode,sizeof(EXT2_NODE));
+printf("여기가 문제인가요\n");
 memset(dotNode->entry.name,0x20,MAX_ENTRY_NAME_LENGTH);
 dotNode->entry.name[0]="."; // 현재 디렉토리 
 dotNode->fs = retEntry->fs ;
 dotNode->entry=retEntry->entry;
 insert_entry(inodenumber,dotNode);
+ printf("지금 들어와있습니당7\n");
+ dotdotNode =(EXT2_NODE *)sector3;
 ZeroMemory(dotdotNode,sizeof(EXT2_NODE));
 memset(dotNode->entry.name,0x20,MAX_ENTRY_NAME_LENGTH);
 dotdotNode->entry.name[0]=".";  // 상위 디렉토리 
@@ -1418,12 +1465,12 @@ dotdotNode->entry.name[1]=".";
 dotdotNode->fs = parent->fs ;
 dotdotNode->entry=parent->entry;
 insert_entry(inodenumber,dotdotNode);
-
+ printf("지금 들어와있습니당8\n");
 
     
 
 
-
+return EXT2_SUCCESS ;
 
 
 
