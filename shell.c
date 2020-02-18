@@ -120,8 +120,7 @@ void do_shell(void)
 
 	while (-1)
 	{
-		printf("g_currentDIr.name : %s\n", g_currentDir.name);
-		printf("�й� : [%s]# ", g_currentDir.name);
+		printf("[%s]# ", g_currentDir.name);
 
 		fgets(buf, 1000, stdin);
 		argc = seperate_string(buf, argv);
@@ -284,7 +283,6 @@ int shell_cmd_exit(int argc, char* argv[])
 
 int shell_cmd_mount(int argc, char* argv[])
 {
-	printf("cmd_mount\n");
 	int result;
 	x++;
 	if (g_fs.mount == NULL)
@@ -303,7 +301,7 @@ int shell_cmd_mount(int argc, char* argv[])
 	}
 	else
 	{  printf(" %s\n",g_currentDir.name);
-		printf(" : %s file system has been mounted successfully\n", g_fs.name);
+		printf("%s file system has been mounted successfully\n\n", g_fs.name);
 		g_isMounted = 1;
 	}
 
@@ -435,7 +433,7 @@ int shell_cmd_format(int argc, char* argv[])
 		return -1;
 	}
 
-	printf("disk has been formatted successfully\n");
+	printf("disk has been formatted successfully\n\n");
 	return 0;
 }
 

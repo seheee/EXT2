@@ -175,8 +175,8 @@ int fs_mount(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* ro
 		printf("\n----------------------------------------------\n");
 	}
 
-	printf("%d\n", result);
-	printf("%s\n", ext2_entry.entry.name);
+	/*printf("%d\n", result);
+	printf("%s\n", ext2_entry.entry.name);*/
 	ext2_entry_to_shell_entry(fs, &ext2_entry, root);
 	
 	return result;
@@ -250,7 +250,7 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 	INODE inodeBuffer;
 	//BYTE* str = "/";
 	BYTE str [MAX_NAME_LENGTH];
-	str[0]='/';
+	//str[0]='/';
 
 	ZeroMemory(shell_entry, sizeof(SHELL_ENTRY));
 
@@ -269,7 +269,7 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 	else {
 
 		 
-		memcpy(&str[1], ext2_entry->entry.name, MAX_NAME_LENGTH-1);
+		memcpy(&str[0], ext2_entry->entry.name, MAX_NAME_LENGTH-1);
 
 		memcpy(shell_entry->name, str, MAX_NAME_LENGTH);
 		//shell_entry->name = *str;
@@ -369,7 +369,7 @@ int is_exist(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENT
 
 	fs_read_dir(disk, fsOprs, parent, &list);
 	current = list.first;
-      printf("%s ffffff \n",list.first->entry.name);
+
 	while (current)
 	{
 		if (my_strnicmp((char*)current->entry.name, name, 12) == 0)
