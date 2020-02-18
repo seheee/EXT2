@@ -482,7 +482,6 @@ void process_meta_data_for_inode_used(EXT2_NODE * retEntry, UINT32 inode_num, in
 
 int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 {
-	printf("inode Num : %d\n", inode_num);
 	BYTE entryName[2] = {0, };
     
 	EXT2_NODE entry = {0, };
@@ -511,6 +510,7 @@ int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 			// DIR_ENTRY_NO_MORE위치에 새로운 entry 추가
 			data_read(entry.fs, entry.location.group, entry.location.block, sector);
 			memcpy(&ent[entry.location.offset], &retEntry->entry, sizeof(EXT2_DIR_ENTRY));
+			
 			data_write(entry.fs, entry.location.group, entry.location.block, sector);
 		
 			retEntry->location = entry.location;
@@ -634,7 +634,8 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
    return EXT2_SUCCESS ;
         
 
-     
+   // inode쓰기
+   // bitmap  
 
 
 
@@ -1234,7 +1235,8 @@ int ext2_read_dir(EXT2_NODE* dir, EXT2_NODE_ADD adder, void* list)
      		return EXT2_ERROR ;
     	
 		int * dataBlocks = get_data_block_at_inode(dir->fs,inodeBuffer);
-	
+		printf("dataBlocks[0] : %d\n", dataBlocks[0]);
+
     	for(int j=0; j<inodeBuffer->blocks ; j++)
 		{
 			data_read(dir->fs,inodeGroup,dataBlocks[j],sector);
@@ -1255,11 +1257,12 @@ int read_dir_from_sector(EXT2_FILESYSTEM* fs, BYTE* sector, EXT2_NODE_ADD adder,
 	int inodeOffset ,inodeGroup ;
 	   
 	entriesPerSector = ( MAX_SECTOR_SIZE/sizeof(EXT2_DIR_ENTRY));
-	 
+	printf("entriesPerSector : %d\n", entriesPerSector);
 	
     
 	for( i=0; i<entriesPerSector ; i++)
 	{
+		printf("read_dir_from_sector의 dir name : %s\n", dir->name);
 		if(dir->name[0]== DIR_ENTRY_FREE)
 			continue ;
 		else if(dir->name[0]==DIR_ENTRY_NO_MORE)
@@ -1398,22 +1401,19 @@ int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEnt
 
 	dotNode =(EXT2_NODE *)sector3;
 	ZeroMemory(dotNode,sizeof(EXT2_NODE));
-
+	dotNode->entry=retEntry->entry;
 	memset(dotNode->entry.name,0x20,MAX_ENTRY_NAME_LENGTH);
 	dotNode->entry.name[0]='.'; // 현재 디렉토리 
-	printf("dotNode Name : %s\n", dotNode->entry.name);
 	dotNode->fs = retEntry->fs ;
-	dotNode->entry=retEntry->entry;
 	insert_entry(inodenumber,dotNode);
 
 	dotdotNode =(EXT2_NODE *)sector3;
 	ZeroMemory(dotdotNode,sizeof(EXT2_NODE));
-	memset(dotNode->entry.name,0x20,MAX_ENTRY_NAME_LENGTH);
+	dotdotNode->entry=parent->entry;
+	memset(dotdotNode->entry.name,0x20,MAX_ENTRY_NAME_LENGTH);
 	dotdotNode->entry.name[0]='.';  // 상위 디렉토리 
 	dotdotNode->entry.name[1]='.';
-	printf("dotdotNode Name : %s\n", dotNode->entry.name);
 	dotdotNode->fs = parent->fs ;
-	dotdotNode->entry=parent->entry;
 	insert_entry(inodenumber,dotdotNode);
 
 	return EXT2_SUCCESS ;

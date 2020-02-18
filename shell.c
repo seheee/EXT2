@@ -119,7 +119,8 @@ void do_shell(void)
 
 	while (-1)
 	{
-		printf("�й� : [/%s]# ", g_currentDir.name);
+		printf("g_currentDIr.name : %s\n", g_currentDir.name);
+		printf("�й� : [%s]# ", g_currentDir.name);
 
 		fgets(buf, 1000, stdin);
 		argc = seperate_string(buf, argv);
@@ -568,6 +569,7 @@ int shell_cmd_ls(int argc, char* argv[])
 	}
 
 	init_entry_list(&list);
+	
 	if (g_fsOprs.read_dir(&g_disk, &g_fsOprs, &g_currentDir, &list))
 	{
 		printf("Failed to read_dir\n");
@@ -575,11 +577,11 @@ int shell_cmd_ls(int argc, char* argv[])
 	}
 
 	current = list.first;
-
+	
 	printf("[File names] [D] [File sizes]\n");
 	while (current)
 	{
-		printf("%-12s  %1d  %12d\n",
+		printf("%-12.11s  %1d  %12d\n",
 			current->entry.name, current->entry.isDirectory, current->entry.size);
 		current = current->next;
 	}

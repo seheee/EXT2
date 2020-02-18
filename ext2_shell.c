@@ -258,7 +258,14 @@ int ext2_entry_to_shell_entry(EXT2_FILESYSTEM* fs, const EXT2_NODE* ext2_entry, 
 
 	int result = get_inode(fs, inode, &inodeBuffer);
 
-	if (ext2_entry->entry.name[0] != '.' && inode == 2);
+	if (ext2_entry->entry.name[0] != '.' && inode == 2)
+	{	
+		memcpy(shell_entry->name, str, MAX_NAME_LENGTH);
+	}
+	else if(ext2_entry->entry.name[0] == '.')
+	{
+		memcpy(shell_entry->name, ext2_entry->entry.name, MAX_NAME_LENGTH);
+	}
 	else {
 
 		 
