@@ -161,7 +161,7 @@ int data_write(EXT2_FILESYSTEM * fs, SECTOR group, SECTOR block, BYTE* sector);
 int ext2_format(DISK_OPERATIONS* disk);
 int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry);
 int ext2_lookup(EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEntry);
-
+int ext2_read(EXT2_NODE * file, unsigned long offset , unsigned long length , const char * buffer);
 UINT32 expand_block(EXT2_FILESYSTEM * , UINT32 );
 int fill_super_block(EXT2_SUPER_BLOCK * sb, SECTOR numberOfSectors, UINT32 bytesPerSector);
 int fill_descriptor_block(EXT2_GROUP_DESCRIPTOR * gd, EXT2_SUPER_BLOCK * sb, SECTOR numberOfSectors, UINT32 bytesPerSector);

@@ -130,7 +130,7 @@ static SHELL_FILE_OPERATIONS g_file =
 {
 	fs_create,
 	NULL,
-	NULL,
+	fs_read,
 	fs_write
 };
 
@@ -211,7 +211,7 @@ int fs_write(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENT
 	EXT2_NODE EXT2Entry;
 
 	shell_entry_to_ext2_entry(entry, &EXT2Entry);
-
+       
 	return ext2_write(&EXT2Entry, offset, length, buffer);
 }
 
@@ -323,7 +323,15 @@ int fs_read_dir(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_
    
 	return EXT2_SUCCESS;
 }
+int	fs_read( DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENTRY* parent, SHELL_ENTRY* entry, unsigned long offset, unsigned long length, char* buffer )
+{                 
+	EXT2_NODE	EXTEntry;
 
+	shell_entry_to_ext2_entry( entry, &EXTEntry );
+              printf("thissis me\n");
+	return ext2_read( &EXTEntry, offset, length, buffer );
+	
+}
 int my_strnicmp(const char* str1, const char* str2, int length)
 {
 	char   c1, c2;
@@ -354,7 +362,7 @@ int is_exist(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENT
 
 	fs_read_dir(disk, fsOprs, parent, &list);
 	current = list.first;
-
+      printf("%s ffffff \n",list.first->entry.name);
 	while (current)
 	{
 		if (my_strnicmp((char*)current->entry.name, name, 12) == 0)
