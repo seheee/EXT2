@@ -43,10 +43,11 @@ int shell_cmd_dumpdatablockbyname(int argc, char * agrv[]);
 int shell_cmd_dumpfileinode(int argc, char * argv[]);
 int shell_cmd_fill(int argc, char* argv[]);
 int shell_cmd_dumpdatablockbynum(int argc, char * argv[]);
-
+int shell_cmd_cat(int argc, char * argv[]);
 static COMMAND g_commands[] =
 {
 	{ "cd",		shell_cmd_cd,		COND_MOUNT	},
+	{ "cat",    shell_cmd_cat,		COND_MOUNT	},
 	{ "mount",	shell_cmd_mount,	COND_UMOUNT	},
 	{ "touch",	shell_cmd_touch,	COND_MOUNT	},
 	{ "fill",	shell_cmd_fill,		COND_MOUNT	},
@@ -385,6 +386,7 @@ int shell_cmd_fill(int argc, char* argv[])
 		memcpy(tmp, "Can you see? ", 13);
 		tmp += 13;
 	}
+	
 	g_fsOprs.fileOprs->write(&g_disk, &g_fsOprs, &g_currentDir, &entry, offset, size, buffer);
 	free(buffer);
 
@@ -547,7 +549,7 @@ int shell_cmd_cat(int argc, char* argv[])
 		printf("%s lookup failed\n", argv[1]);
 		return -1;
 	}
-
+	printf("1\n");
 	while (g_fsOprs.fileOprs->read(&g_disk, &g_fsOprs, &g_currentDir, &entry, offset, 1024, buf) > 0)
 	{
 		printf("%s", buf);
