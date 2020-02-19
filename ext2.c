@@ -9,61 +9,88 @@ typedef struct
 int* get_data_block_at_inode(EXT2_FILESYSTEM *fs, INODE *inode);
 int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, const char* buffer)
 {  
-	int writeEnd ;
-  int currentOffset ,currentBlock , blockSeq,copyLength ;
-  int fileSize ,i=0  ;
-  INODE * inodeBuffer ;
-  char sector[MAX_SECTOR_SIZE];
-  ZeroMemory(sector,sizeof(sector));
- inodeBuffer = (INODE *)sector ;
-  int * dataBlocks;
-  get_inode(file->fs,file->entry.inode,&inodeBuffer);
-  // 새로만든 파일이라서 쓸 블럭이 없으면 추가시켜준다 
-   
-  if(inodeBuffer->blocks==0)
-  {
-    expand_block(file->fs,file->entry.inode);
-  }       
-  get_inode(file->fs,file->entry.inode,inodeBuffer);  
-  currentOffset = offset ;  // 어디부터 쓸건지 
-   fileSize =inodeBuffer->blocks;  // 파일 사이즈를 기록한다  
+	BYTE	sector[MAX_SECTOR_SIZE];
+	DWORD	currentOffset, currentBlock, blockSeq = 0;
+	DWORD	blockNumber, sectorNumber, sectorOffset;
+	DWORD	readEnd;
+	DWORD	blockSize;
+	INODE node;
+	int i;
+	int *dataBlocks ; 
+	get_inode(file->fs, file->entry.inode, &node);    // 해당 아이노드를 구하고
+	printf("%d \n",file->entry.inode); 
+	if(node.blocks ==0)
+	{expand_block(file->fs,file->entry.inode);   // 블록 하나 늘려주고 
+	get_inode(file->fs, file->entry.inode, &node);  
+	}  // 해당 아이노드를 구하고 
+	currentBlock = node.block[0];     // 현재 블록 초기화 
+	readEnd = offset + length;
+	currentOffset = offset;
+    blockSize = node.blocks * MAX_BLOCK_SIZE ;  // 현재 해당 아이노드가 가지고 있는 블록 크기 초기화 해줌 
+	i =0;
+	while(offset>blockSize-1)   // 만약 offset이 아이노드가 가지고 있는 블록 크기를 넘어선다면 
+	{
 
-   while((offset) >(inodeBuffer->blocks*MAX_BLOCK_SIZE-1))   // offset이 가지고 있는 블록보다 클경우 
-   {
-        
-      expand_block(file->fs,file->entry.inode);
-   }
-   
-   
-     dataBlocks =get_data_block_at_inode(file->fs,&inodeBuffer); // 블럭 받는다 
-      writeEnd =  MIN(offset +length , fileSize *MAX_BLOCK_SIZE);  // 어디까지 쓸건지 
-  int blockOffset = currentOffset % MAX_BLOCK_SIZE ;   // 해당 블록 내에서의 위치 
+         expand_block(file->fs,file->entry.inode);
+         blockSize += MAX_BLOCK_SIZE ;
+		 ++ blockSeq ;
+		 i++ ;
+	}
+	get_inode(file->fs,file->entry.inode,&node); // 다시 초기화 시켜준다 
+    dataBlocks = get_data_block_at_inode(file->fs,&node);
+	currentBlock= dataBlocks[i];  // 해당 블록 받아온다 
+	while (currentOffset < readEnd)       // 계속 쓰는 작업 
+	{
+		DWORD	copyLength;
 
-   while((offset) >(inodeBuffer->blocks*MAX_BLOCK_SIZE-1))
-   {
-       dataBlocks[++i];
-   }        // 해당 블럭을 찾는 일 
-    
-    currentBlock = dataBlocks[i]; // 몇번째 블록 부터 읽을지 정한다 
 
-	ZeroMemory(sector,sizeof(sector));
+		blockNumber = currentOffset / MAX_BLOCK_SIZE;    // 해당 아이노드 블록 넘버 
+		if (blockSeq != blockNumber)   // 다음 블록을 쓸경우 
+		{
+			DWORD nextBlock;
+			blockSeq++;
+			++i;
+			if (i>=node.blocks)
+			{   	
+				expand_block(file->fs, file->entry.inode);
+				get_inode(file->fs, file->entry.inode, &node);
+				dataBlocks =get_data_block_at_inode(file->fs, &node);
+				nextBlock =dataBlocks[i];
+			}
+			else 
+			nextBlock = dataBlocks[i];
 
-   while(currentOffset<writeEnd)  // 어디까지 읽을지 정하는 것 
-   {    
-         data_read(file->fs ,file->location.group ,currentBlock,sector);  // 일단 해당 그룹의 블록을 읽어온다 
 
-        copyLength =MIN(MAX_BLOCK_SIZE-blockOffset , writeEnd - currentOffset );
-      memcpy(&sector[blockOffset],buffer,copyLength);
-	   data_write(file->fs,file->location.group,currentBlock,sector);
-        buffer += copyLength ; // 읽은만큼 더해준다 
-        currentOffset += offset ;       
-   }
+			currentBlock = nextBlock;
+		}
+		sectorNumber = (currentOffset / (MAX_SECTOR_SIZE)) % (MAX_BLOCK_SIZE / MAX_SECTOR_SIZE);
+		sectorOffset = currentOffset % MAX_SECTOR_SIZE;
 
+		copyLength = MIN(MAX_SECTOR_SIZE - sectorOffset, readEnd - currentOffset);
+		if (copyLength != MAX_SECTOR_SIZE)
+		{     
+			if (data_read(file->fs, file->location.group, currentBlock, sector))
+				break;
+		}
+
+		memcpy(&sector[sectorOffset],
+			buffer,
+			copyLength);
+		if (data_write(file->fs, file->location.group, currentBlock, sector))
+			break;
+
+		buffer += copyLength;
+		currentOffset += copyLength;
+		get_inode(   file->fs  ,file->entry.inode,&node);
+	
+	}
+
+	node.size = MAX(currentOffset, node.size);
+	set_inode_onto_inode_table(file->fs, file->entry.inode, &node);
   return currentOffset - offset ; // 얼마나 읽었는지 알려준다 
 }
 int ext2_read(EXT2_NODE * file, unsigned long offset , unsigned long length , const char * buffer)
 {   
-
   int readEnd ;
   int currentOffset ,currentBlock , blockSeq,copyLength ;
   int fileSize ,i=0  ;
@@ -82,21 +109,22 @@ int ext2_read(EXT2_NODE * file, unsigned long offset , unsigned long length , co
   fileSize =inodeBuffer->blocks;
    readEnd =  MIN(offset +length , fileSize *MAX_BLOCK_SIZE);
   int blockOffset = currentOffset % MAX_BLOCK_SIZE ;   // 해당 블록 내에서 몇번째 섹터인지 
-
    while((offset/MAX_BLOCK_SIZE) > i )
    {
        dataBlocks[++i];
    }        // 해당 블럭을 찾는 일 
     currentBlock = dataBlocks[i]; // 몇번째 블록 부터 읽을지 정한다 
 	ZeroMemory(sector,sizeof(sector));
-
    while(currentOffset<readEnd)  // 어디까지 읽을지 정하는 것 
    {     
          data_read(file->fs ,file->location.group ,currentBlock,sector);  // 일단 해당 그룹의 블록을 읽어온다 
+		 
         copyLength =MIN(MAX_BLOCK_SIZE-blockOffset , readEnd - currentOffset );
+		 
       memcpy(buffer,&sector[blockOffset],copyLength);
+	 
         buffer += copyLength ; // 읽은만큼 더해준다 
-        currentOffset += offset ;       
+        currentOffset += copyLength ;   
    }
   return currentOffset - offset ; // 얼마나 읽었는지 알려준다 
 
@@ -703,7 +731,7 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 
     if(blocks<12)
 	{
-       	inodeBuffer->block[++blocks]= used_blocks ;
+       	inodeBuffer->block[blocks++]= used_blocks ;
 	}
 	else if(blocks < 12+256)
 	{
@@ -722,7 +750,7 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 
 	}
 	inodeBuffer->blocks = blocks;
-
+   printf(" aaa %d\n",used_blocks);
 	write_bitmap( used_blocks,1,sector);
    	fs->disk->write_sector(fs->disk, 1+groupNum*fs->sb.block_per_group+2, sector);   // 블록 비트맵 수정 
 
@@ -900,7 +928,7 @@ int find_entry_on_root(EXT2_FILESYSTEM* fs, INODE inode, char* formattedName, EX
 	UINT32 last = entry_cnt_per_block - 1;
 	 
 	UINT32 result = find_entry_at_sector(sector, formattedName, 0, last, &number);
-
+         
 	if(result == -1 || result == -2)
 	{
 		return EXT2_ERROR;
@@ -1481,10 +1509,6 @@ int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEnt
 	parent->fs->disk->read_sector(parent->fs->disk,1+sector_num_per_group*group+2,sector);
 	write_bitmap(inode->block[0],1,sector);
 	parent->fs->disk->write_sector(parent->fs->disk,1+sector_num_per_group*group+2,sector);
-	
-	/*parent->fs->disk->read_sector(parent->fs->disk,1+sector_num_per_group*group+3,sector);// 아이노드 비트맵 고치기
-	write_bitmap(inodenumber-1,1,sector);
-	parent->fs->disk->write_sector(parent->fs->disk,1+sector_num_per_group*group+3,sector);   */
 	ZeroMemory(sector,sizeof(sector));
 	parent->fs->disk->read_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
 	write_bitmap(retEntry->entry.inode-1, 1, sector);

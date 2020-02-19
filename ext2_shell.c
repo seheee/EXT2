@@ -335,7 +335,6 @@ int	fs_read( DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENT
 	EXT2_NODE	EXTEntry;
 
 	shell_entry_to_ext2_entry( entry, &EXTEntry );
-              printf("thissis me\n");
 	return ext2_read( &EXTEntry, offset, length, buffer );
 	
 }
