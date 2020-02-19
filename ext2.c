@@ -19,6 +19,11 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 	int *dataBlocks ; 
 	get_inode(file->fs, file->entry.inode, &node);    // 해당 아이노드를 구하고
 	printf("%d \n",file->entry.inode); 
+	if(file->fs->gd.free_blocks_count<(length/MAX_SECTOR_SIZE)+1)
+	{
+		printf("not enough blocks\n");
+		return EXT2_ERROR;
+	}
 	if(node.blocks ==0)
 	{expand_block(file->fs,file->entry.inode);   // 블록 하나 늘려주고 
 	file->fs->sb.free_block_count --;
@@ -40,7 +45,7 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 		 ++ blockSeq ;
 		 i++ ;
 	}
-	file->fs->sb.free_block_count -= i;
+	file->fs->sb.free_block_count -= i; 
 	file->fs->gd.free_blocks_count -= i;
 	write_super_block(&file->fs->sb, file->fs->disk);
 	write_group_descriptor(file->fs->disk, &file->fs->gd, file->entry.inode/file->fs->sb.inode_per_group);
@@ -413,68 +418,8 @@ int fill_descriptor_block(EXT2_GROUP_DESCRIPTOR * gd, EXT2_SUPER_BLOCK * sb, SEC
 // root directory 생성 
 int create_root(DISK_OPERATIONS* disk, EXT2_SUPER_BLOCK * sb)
 {
-   /* EXT2_NODE dotNode, dotdotNode ;
-	EXT2_DIR_ENTRY * entry ;
-	BYTE sector[MAX_SECTOR_SIZE];
-	BYTE sector2[MAX_SECTOR_SIZE];
-	INODE *id;
-	INODE *id2;
-	EXT2_GROUP_DESCRIPTOR * gd;
-	SECTOR rootsector =0;
-	EXT2_SUPER_BLOCK * sb2;
-	ZeroMemory(sector,MAX_SECTOR_SIZE);
-	entry= (EXT2_DIR_ENTRY *)sector;
-	memcpy(entry->name,VOLUME_LABLE,13);
-	entry->name_len=sizeof(VOLUME_LABLE);
-	entry->inode=2;
-    ZeroMemory(&dotNode, sizeof(EXT2_NODE));
-	memset(dotNode.entry.name,0x20,11);
-    dotNode.entry.name[0]=".";
-    dotNode.entry.inode=2;
-	insert_entry(2,dotNode,0x4000);
-	 ZeroMemory(&dotNode, sizeof(EXT2_NODE));
-	memset(dotNode.entry.name,0x20,11);
-    dotdotNode.entry.name[0]=".";
-	dotdotNode.entry.name[1]=".";
-    dotdotNode.entry.inode=2;
-	insert_entry(2,dotdotNode,0x4000);
-	entry++;
-	entry->name[0]= DIR_ENTRY_NO_MORE;
-	rootsector= 1+sb->first_data_block_each_group; // 부트 코드 땜에 1 더해줌
-	disk->write_sector(disk,rootsector,sector);
-	// 지금까지 해당 엔트리를 만들어서 넣었고 이제 inode 테이블하고 superblock하고 groupdescriptor 내용 바꾸는 일 해야함
-	ZeroMemory(sector,MAX_SECTOR_SIZE);
-	sb2= (EXT2_SUPER_BLOCK *)sector ;
-	disk->read_sector(disk,1,sector);
-	sb2->free_block_count --;
-	sb2->free_inode_count --;
-	write_super_block(sb,disk);
-	gd= (EXT2_GROUP_DESCRIPTOR *)sector ;
-	ZeroMemory(sector,MAX_SECTOR_SIZE);
-	disk->read_sector(disk,2,gd);
-	gd-> free_blocks_count --;
-	gd-> free_inodes_count --;
-	gd-> directories_count ++;
-	for(int i=0; i<NUMBER_OF_GROUPS; i++)
-	write_group_descriptor(disk,gd,i);
-	ZeroMemory(sector, sizeof(sector));
-	disk->read_sector(disk, 3,sector);
-	sector[2] |= 0x02;
-	disk->write_sector(disk,3,sector); // 블록 비트맵 할당
-	ZeroMemory(sector, MAX_SECTOR_SIZE);
-	id= (INODE *)sector;
-	disk->read_sector(disk,5,sector); // 아이노드 테이블
-	id ++;
-	id->mode = 0x4000 ;
-	id->size =0 ;
-	id->uid = 0;
-	id->block[0]= 1+sb->first_data_block_each_group ;
-	disk->write_sector(disk,5,sector);
-	
-	
+   
 
-
-	return EXT2_SUCCESS ;*/
 	BYTE   sector[MAX_SECTOR_SIZE];
 	SECTOR   rootSector = 0;
 	EXT2_DIR_ENTRY * entry;
@@ -771,10 +716,7 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 	for(int i = 0; i < MAX_SECTOR_SIZE; i++)
 	{
 	
-		for(int j=7; j>=0; --j)
-		{
-			printf("%d", (sector[i]>>j)&1);
-		}
+		
 		for(int j = 0; j < 8; j++)
 		{
 			
@@ -785,10 +727,10 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 				
 			}
 			used_blocks ++;			
-			printf("the blocks %d\n",used_blocks);
+			
 		}
 		if(f==1) break;
-		printf("%d\n", i);
+		
 	
 	}
 	
@@ -803,7 +745,7 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 	else if(blocks < 12+256)
 	{ 
     	int blocknumber = inodeBuffer.block[12];
-	  	printf("%d \n",used_blocks);
+	  	
        data_read(fs,groupNum,blocknumber,sector2);
 		int *a = (int *)sector2 ;
 		a[blocks-12]=used_blocks ;
@@ -1776,6 +1718,7 @@ int ext2_df( EXT2_FILESYSTEM* fs, UINT32* totalSectors, UINT32* usedSectors )
 	EXT2_SUPER_BLOCK* sb = (EXT2_SUPER_BLOCK*)sector;
 	data_read(fs, 0, 0, sector);
 
+	printf("sb->free : %d\n", sb->free_block_count);
 	*usedSectors = *totalSectors - (sb->free_block_count * (MAX_BLOCK_SIZE/MAX_SECTOR_SIZE));
 	return EXT2_SUCCESS;
 }

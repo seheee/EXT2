@@ -147,8 +147,6 @@ static SHELL_FS_OPERATIONS   g_fsOprs =
 
 int fs_stat( DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, unsigned int* totalSectors, unsigned int* usedSectors )
 {
-	EXT2_NODE entry;
-
 	return ext2_df( (EXT2_FILESYSTEM*)fsOprs->pdata, totalSectors, usedSectors );
 }
 int fs_remove (DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENTRY* current, const char* name)
