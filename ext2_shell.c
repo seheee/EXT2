@@ -139,12 +139,26 @@ static SHELL_FS_OPERATIONS   g_fsOprs =
 	fs_read_dir,
 	NULL,
 	fs_mkdir,
-	NULL,
+	fs_rmdir,
 	fs_lookup,
 	&g_file,
 	NULL
 };
 
+//.rmdir(&g_disk, &g_fsOprs, &g_currentDir, argv[1]);
+int fs_rmdir(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* current, const char* name)
+{
+	EXT2_NODE      EXT2_Current;
+	EXT2_NODE      dir;
+
+	shell_entry_to_ext2_entry(current, &EXT2_Current);
+
+	// 해당 name이 있는지 찾고, dir에 찾은 dir_entry채워줌
+	ext2_lookup(&EXT2_Current, name, &dir);
+
+	return ext2_rmdir(&dir);
+
+}
 int fs_mount(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* root)
 {
 	EXT2_FILESYSTEM* fs;

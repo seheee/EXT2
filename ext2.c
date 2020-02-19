@@ -703,7 +703,7 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 
     if(blocks<12)
 	{
-       	inodeBuffer->block[++blocks]= used_blocks ;
+       	inodeBuffer->block[blocks++]= used_blocks ;
 	}
 	else if(blocks < 12+256)
 	{
@@ -849,7 +849,7 @@ int find_entry_at_sector(const BYTE* sector, const BYTE* formattedName, UINT32 b
 		// formattedName이 null
 		if(formattedName == NULL)
 		{
-			if(entry[i].name[0] != DIR_ENTRY_FREE && entry[i].name[0] != DIR_ENTRY_NO_MORE)
+			if(entry[i].name[0] != DIR_ENTRY_FREE && entry[i].name[0] != DIR_ENTRY_NO_MORE && entry[i].name[0] != '.')
 			{
 				*number = i;
 				return EXT2_SUCCESS;
@@ -1509,5 +1509,72 @@ int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEnt
 	insert_entry(inodenumber,dotdotNode);
 
 	return EXT2_SUCCESS ;
+
+}
+
+int ext2_rmdir(EXT2_NODE* dir)
+{
+	// 디렉터리인지 검사
+	INODE inodeBuffer;
+	get_inode(dir->fs, dir->entry.inode, &inodeBuffer);
+	if(!(inodeBuffer.mode & FILE_TYPE_DIR))
+	{
+		return EXT2_ERROR;
+	}
+
+	if(has_sub_entries(dir->fs, &dir->entry))
+	{
+		return EXT2_ERROR;
+	}
+
+	dir->entry.name[0] = DIR_ENTRY_FREE;
+
+	char sector[MAX_SECTOR_SIZE];
+	EXT2_DIR_ENTRY * ent;
+	ent = (EXT2_DIR_ENTRY*) sector;
+	data_read(dir->fs, dir->location.group, dir->location.block, sector );
+	ent[dir->location.offset] = dir->entry;
+	data_write(dir->fs, dir->location.group, dir->location.block, sector);
+	
+	// super block
+	dir->fs->sb.free_inode_count++;
+	dir->fs->sb.free_block_count++;
+	write_super_block(&dir->fs->sb, dir->fs->disk);
+
+	int group = (dir->entry.inode-1)/dir->fs->sb.inode_per_group;
+
+	// group descriptor
+	dir->fs->gd.free_inodes_count++;
+	dir->fs->gd.free_blocks_count++;
+	dir->fs->gd.directories_count--;
+	write_group_descriptor(dir->fs->disk, &dir->fs->gd, group);
+
+	// inode bitmap
+	ZeroMemory(sector,sizeof(sector));
+	dir->fs->disk->read_sector(dir->fs->disk, 1 + (dir->fs->sb.block_per_group*group) + 3, sector);
+	write_bitmap(dir->entry.inode-1, 0, sector);
+	dir->fs->disk->write_sector(dir->fs->disk,1 + (group*dir->fs->sb.block_per_group) + 3, sector);
+
+	// block bitmap
+	ZeroMemory(sector,sizeof(sector));
+	dir->fs->disk->read_sector(dir->fs->disk, 1 + (dir->fs->sb.block_per_group*group) + 2, sector);
+	write_bitmap(inodeBuffer.block[0], 0, sector);
+	dir->fs->disk->write_sector(dir->fs->disk,1 + (group*dir->fs->sb.block_per_group) + 2, sector);
+	
+}
+
+int has_sub_entries(EXT2_FILESYSTEM*fs, const EXT2_DIR_ENTRY* entry)
+{
+	EXT2_NODE subEntry;
+
+
+	if(!lookup_entry(fs, entry->inode, NULL, &subEntry ))
+	{
+		return EXT2_ERROR; // 찾음
+	}
+
+
+
+	return EXT2_SUCCESS;
 
 }

@@ -44,6 +44,8 @@ int shell_cmd_dumpfileinode(int argc, char * argv[]);
 int shell_cmd_fill(int argc, char* argv[]);
 int shell_cmd_dumpdatablockbynum(int argc, char * argv[]);
 int shell_cmd_cat(int argc, char * argv[]);
+int shell_cmd_rmdir(int argc, char* argv[]);
+
 static COMMAND g_commands[] =
 {
 	{ "cd",		shell_cmd_cd,		COND_MOUNT	},
@@ -61,7 +63,8 @@ static COMMAND g_commands[] =
 	{ "dumpinodebitmap" , shell_cmd_dumpinodebitmap, COND_MOUNT  },
 	{ "dumpinodetable" , shell_cmd_dumpinodetable, COND_MOUNT  },
 	{ "dumpdatablockbyname", shell_cmd_dumpdatablockbyname, COND_MOUNT  },
-	{ "dumpfileinode", shell_cmd_dumpfileinode, COND_MOUNT  }
+	{ "dumpfileinode", shell_cmd_dumpfileinode, COND_MOUNT  },
+	{ "rmdir", shell_cmd_rmdir, COND_MOUNT }
 };
 
 static SHELL_FILESYSTEM		g_fs;
