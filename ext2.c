@@ -1693,3 +1693,15 @@ int ext2_remove(EXT2_NODE* file)
 	return EXT2_SUCCESS;
 
 }
+
+int ext2_df( EXT2_FILESYSTEM* fs, UINT32* totalSectors, UINT32* usedSectors )
+{
+	*totalSectors = NUMBER_OF_SECTORS; 
+
+	char sector[MAX_SECTOR_SIZE];
+	EXT2_SUPER_BLOCK* sb = (EXT2_SUPER_BLOCK*)sector;
+	data_read(fs, 0, 0, sector);
+
+	*usedSectors = *totalSectors - (sb->free_block_count * (MAX_BLOCK_SIZE/MAX_SECTOR_SIZE));
+	return EXT2_SUCCESS;
+}

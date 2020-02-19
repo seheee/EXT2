@@ -46,6 +46,7 @@ int shell_cmd_dumpdatablockbynum(int argc, char * argv[]);
 int shell_cmd_cat(int argc, char * argv[]);
 int shell_cmd_rmdir(int argc, char* argv[]);
 int shell_cmd_rm(int argc, char* argv[]);
+int shell_cmd_df(int argc, char* argv[]);
 
 static COMMAND g_commands[] =
 {
@@ -66,7 +67,8 @@ static COMMAND g_commands[] =
 	{ "dumpdatablockbyname", shell_cmd_dumpdatablockbyname, COND_MOUNT  },
 	{ "dumpfileinode", shell_cmd_dumpfileinode, COND_MOUNT  },
 	{ "rmdir", shell_cmd_rmdir, COND_MOUNT },
-	{ "rm", shell_cmd_rm, COND_MOUNT}
+	{ "rm", shell_cmd_rm, COND_MOUNT},
+	{ "df", shell_cmd_df, COND_MOUNT}
 };
 
 static SHELL_FILESYSTEM		g_fs;

@@ -137,7 +137,7 @@ static SHELL_FILE_OPERATIONS g_file =
 static SHELL_FS_OPERATIONS   g_fsOprs =
 {
 	fs_read_dir,
-	NULL,
+	fs_stat,
 	fs_mkdir,
 	fs_rmdir,
 	fs_lookup,
@@ -145,6 +145,12 @@ static SHELL_FS_OPERATIONS   g_fsOprs =
 	NULL
 };
 
+int fs_stat( DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, unsigned int* totalSectors, unsigned int* usedSectors )
+{
+	EXT2_NODE entry;
+
+	return ext2_df( (EXT2_FILESYSTEM*)fsOprs->pdata, totalSectors, usedSectors );
+}
 int fs_remove (DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENTRY* current, const char* name)
 {
 	EXT2_NODE      EXT2_Current;
