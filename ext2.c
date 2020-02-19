@@ -695,19 +695,24 @@ UINT32 get_available_data_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 
 	int used_blocks =0;  
 
-		fs->disk->read_sector(fs->disk, 1+inode_group*fs->sb.block_per_group+2, sector);
-	 for(int i = 0; i < MAX_SECTOR_SIZE; i++)
+	fs->disk->read_sector(fs->disk, 1+inode_group*fs->sb.block_per_group+2, sector);
+	int a=0;
+	for(int i = 0; i < MAX_SECTOR_SIZE; i++)
+	{
+	
+		for(int j = 0; j < 8; j++)
 		{
-			for(int j = 0; j < 8; j++)
+			
+			if(!(((unsigned char)sector[i])&((0x01) << j)))
 			{
+				a = 1;
+				break;
 				
-				if(!((unsigned char)sector[i] >> j)^0)
-				{
-					break;
-				}
-				used_blocks ++;			
 			}
+			used_blocks ++;			
 		}
+		if(a==1) break;
+	}
 
 
 
@@ -733,6 +738,7 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 	char sector2[MAX_SECTOR_SIZE];
 	
   	fs->disk->read_sector(fs->disk, 1+groupNum*fs->sb.block_per_group+2, sector);
+
     if(blocks==12)
 	{
       int indexBlock1= get_available_data_block(fs,inode_num);
@@ -761,6 +767,7 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
       // set_inode_onto_inode_table(fs,inode_num,&inodeBuffer);
 	}
 	int f=0;
+
 	for(int i = 0; i < MAX_SECTOR_SIZE; i++)
 	{
 	
@@ -792,9 +799,9 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
        	inodeBuffer.block[blocks++]= used_blocks ;
 		
 	}
+
 	else if(blocks < 12+256)
-	{
-	 
+	{ 
     	int blocknumber = inodeBuffer.block[12];
 	  	printf("%d \n",used_blocks);
        data_read(fs,groupNum,blocknumber,sector2);
@@ -802,6 +809,7 @@ UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 		a[blocks-12]=used_blocks ;
 		 data_write(fs,groupNum,blocknumber,sector2);   
 		blocks ++ ;
+
 	}
 	else if(blocks< 12+256+256*256)
 	{
@@ -1152,6 +1160,7 @@ int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry)
 	// fs, inode할당
 	retEntry->fs = parent->fs;
 	retEntry->entry.inode = get_free_inode_number(parent->fs, group);
+	printf("inodeNum : %d\n", retEntry->entry.inode);
 	
 	// inode bitmap
 	parent->fs->disk->read_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
@@ -1649,10 +1658,10 @@ int ext2_rmdir(EXT2_NODE* dir)
 		return EXT2_ERROR;
 	}
 
-	/*if(has_sub_entries(dir->fs, &dir->entry))
+	if(has_sub_entries(dir->fs, &dir->entry))
 	{
 		return EXT2_ERROR;
-	}*/
+	}
 
 	//memset(dir->entry.name, 0x20, MAX_NAME_LENGTH);
 	dir->entry.name[0] = DIR_ENTRY_FREE;
@@ -1690,6 +1699,8 @@ int ext2_rmdir(EXT2_NODE* dir)
 	dir->fs->disk->read_sector(dir->fs->disk, 1 + (dir->fs->sb.block_per_group*group) + 2, sector);
 	write_bitmap(inodeBuffer.block[0], 0, sector);
 	dir->fs->disk->write_sector(dir->fs->disk,1 + (group*dir->fs->sb.block_per_group) + 2, sector);
+
+	return EXT2_SUCCESS;
 	
 }
 
@@ -1703,8 +1714,68 @@ int has_sub_entries(EXT2_FILESYSTEM*fs, const EXT2_DIR_ENTRY* entry)
 		return EXT2_ERROR; // 찾음
 	}
 
+	return EXT2_SUCCESS;
+}
 
+int ext2_remove(EXT2_NODE* file)
+{
+	INODE inodeBuffer;
+	get_inode(file->fs, file->entry.inode, &inodeBuffer);
+	if(inodeBuffer.mode & FILE_TYPE_DIR)
+	{
+		return EXT2_ERROR;
+	}
+
+	file->entry.name[0] = DIR_ENTRY_FREE;
+
+	char sector[MAX_SECTOR_SIZE];
+	EXT2_DIR_ENTRY * ent;
+	ent = (EXT2_DIR_ENTRY*) sector;
+
+	data_read(file->fs, file->location.group, file->location.block, sector );
+	ent[file->location.offset] = file->entry;
+	data_write(file->fs, file->location.group, file->location.block, sector);
+	
+	// super block
+	file->fs->sb.free_inode_count++;
+	file->fs->sb.free_block_count += inodeBuffer.blocks;
+	write_super_block(&file->fs->sb, file->fs->disk);
+
+	int group = (file->entry.inode-1)/file->fs->sb.inode_per_group;
+
+	// group descriptor
+	file->fs->gd.free_inodes_count++;
+	file->fs->gd.free_blocks_count += inodeBuffer.blocks;
+	write_group_descriptor(file->fs->disk, &file->fs->gd, group);
+
+	// inode bitmap
+	ZeroMemory(sector,sizeof(sector));
+	file->fs->disk->read_sector(file->fs->disk, 1 + (file->fs->sb.block_per_group*group) + 3, sector);
+	write_bitmap(file->entry.inode-1, 0, sector);
+	file->fs->disk->write_sector(file->fs->disk,1 + (group*file->fs->sb.block_per_group) + 3, sector);
+	printf("inode bitmap inode : %d\n", file->entry.inode);
+
+	// block bitmap
+	ZeroMemory(sector,sizeof(sector));
+	file->fs->disk->read_sector(file->fs->disk, 1 + (file->fs->sb.block_per_group*group) + 2, sector);
+	for(int i = 0; i < inodeBuffer.blocks; i++)
+	{
+		write_bitmap(inodeBuffer.block[i], 0, sector);
+	}
+	file->fs->disk->write_sector(file->fs->disk,1 + (group*file->fs->sb.block_per_group) + 2, sector);
 
 	return EXT2_SUCCESS;
 
+}
+
+int ext2_df( EXT2_FILESYSTEM* fs, UINT32* totalSectors, UINT32* usedSectors )
+{
+	*totalSectors = NUMBER_OF_SECTORS; 
+
+	char sector[MAX_SECTOR_SIZE];
+	EXT2_SUPER_BLOCK* sb = (EXT2_SUPER_BLOCK*)sector;
+	data_read(fs, 0, 0, sector);
+
+	*usedSectors = *totalSectors - (sb->free_block_count * (MAX_BLOCK_SIZE/MAX_SECTOR_SIZE));
+	return EXT2_SUCCESS;
 }
