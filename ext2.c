@@ -21,6 +21,10 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 	printf("%d \n",file->entry.inode); 
 	if(node.blocks ==0)
 	{expand_block(file->fs,file->entry.inode);   // 블록 하나 늘려주고 
+	file->fs->sb.free_block_count --;
+	file->fs->gd.free_blocks_count --;
+	write_super_block(&file->fs->sb, file->fs->disk);
+	write_group_descriptor(file->fs->disk, &file->fs->gd, file->entry.inode/file->fs->sb.inode_per_group);
 	get_inode(file->fs, file->entry.inode, &node);  
 	}  // 해당 아이노드를 구하고 
 	currentBlock = node.block[0];     // 현재 블록 초기화 
@@ -36,6 +40,11 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 		 ++ blockSeq ;
 		 i++ ;
 	}
+	file->fs->sb.free_block_count -= i;
+	file->fs->gd.free_blocks_count -= i;
+	write_super_block(&file->fs->sb, file->fs->disk);
+	write_group_descriptor(file->fs->disk, &file->fs->gd, file->entry.inode/file->fs->sb.inode_per_group);
+
 	get_inode(file->fs,file->entry.inode,&node); // 다시 초기화 시켜준다 
     dataBlocks = get_data_block_at_inode(file->fs,&node);
 	currentBlock= dataBlocks[i];  // 해당 블록 받아온다 
@@ -53,6 +62,10 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 			if (i>=node.blocks)
 			{   	
 				expand_block(file->fs, file->entry.inode);
+				file->fs->sb.free_block_count --;
+				file->fs->gd.free_blocks_count --;
+				write_super_block(&file->fs->sb, file->fs->disk);
+				write_group_descriptor(file->fs->disk, &file->fs->gd, file->entry.inode/file->fs->sb.inode_per_group);
 				get_inode(file->fs, file->entry.inode, &node);
 				dataBlocks =get_data_block_at_inode(file->fs, &node);
 				nextBlock =dataBlocks[i];
@@ -643,6 +656,10 @@ int insert_entry(UINT32 inode_num, EXT2_NODE * retEntry)
 				if(inode_num != 2)
 				{
 					int num = expand_block(retEntry->fs, inode_num);
+					retEntry->fs->sb.free_block_count --;
+					retEntry->fs->gd.free_blocks_count --;
+					write_super_block(&retEntry->fs->sb, retEntry->fs->disk);
+					write_group_descriptor(retEntry->fs->disk, &retEntry->fs->gd, inode_num/retEntry->fs->sb.inode_per_group);
 					entry.location.block = num;
 					entry.location.offset=0;
 
@@ -711,73 +728,108 @@ void process_meta_data_for_block_used(EXT2_FILESYSTEM * fs, UINT32 inode_num)
 
 // 파일 크기가 커질때 block 더 할당
 UINT32 expand_block(EXT2_FILESYSTEM * fs, UINT32 inode_num)
-{   
-	INODE * inodeBuffer ;
-	get_inode(fs,inode_num,inodeBuffer);
-	int blocks= inodeBuffer->blocks; 
+{  
+	INODE inodeBuffer = {0, } ;
+	get_inode(fs,inode_num,&inodeBuffer);
+	int blocks= inodeBuffer.blocks; 
   	int used_blocks=0;
 	int groupNum = (inode_num-1)/fs->sb.inode_per_group;
 	char sector[MAX_SECTOR_SIZE];
-
+	char sector2[MAX_SECTOR_SIZE];
+	
   	fs->disk->read_sector(fs->disk, 1+groupNum*fs->sb.block_per_group+2, sector);
 
-	
-
-	if(blocks == 12)
-	{   
-		printf("if2\n");
-		//블록할당...
-		int result = get_available_data_block(fs, inode_num);
-
+    if(blocks==12)
+	{
+      int indexBlock1= get_available_data_block(fs,inode_num);
+      write_bitmap(indexBlock1,1,sector); 
+	  inodeBuffer.block[12]=indexBlock1;
+	  set_inode_onto_inode_table(fs,inode_num,&inodeBuffer);
+      fs->disk->write_sector(fs->disk, 1+groupNum*fs->sb.block_per_group+2, sector); // 비트맵 넣어준다  
 	}
-	int a=0;
+	else if(blocks==268)
+	{
+      int indexBlock2= get_available_data_block(fs,inode_num);
+      write_bitmap(indexBlock2,1,sector); 
+	  inodeBuffer.block[13]=indexBlock2;
+	  set_inode_onto_inode_table(fs,inode_num,&inodeBuffer);
+      fs->disk->write_sector(fs->disk, 1+groupNum*fs->sb.block_per_group+2, sector); // 비트맵 넣어준다 
+	}
+	else if((blocks>=268)&& ((blocks-268)%256==0))
+	{
+      int subBlock = get_available_data_block(fs,inode_num);
+	  write_bitmap(subBlock,1,sector);
+	  fs->disk->write_sector(fs->disk, 1+groupNum*fs->sb.block_per_group+2, sector); // 비트맵 넣어준다 
+      int *b = (int *)sector2;
+	  data_read(fs,groupNum,inodeBuffer.block[13]   ,sector2);
+	  b[(blocks-268)/256]=subBlock ;
+      data_write(fs,groupNum, inodeBuffer.block[13] ,sector2);
+      // set_inode_onto_inode_table(fs,inode_num,&inodeBuffer);
+	}
+	int f=0;
+
 	for(int i = 0; i < MAX_SECTOR_SIZE; i++)
 	{
 	
+		for(int j=7; j>=0; --j)
+		{
+			printf("%d", (sector[i]>>j)&1);
+		}
 		for(int j = 0; j < 8; j++)
 		{
 			
 			if(!(((unsigned char)sector[i])&((0x01) << j)))
 			{
-				a = 1;
+				f = 1; 
 				break;
 				
 			}
 			used_blocks ++;			
+			printf("the blocks %d\n",used_blocks);
 		}
-		if(a==1) break;
+		if(f==1) break;
+		printf("%d\n", i);
+	
 	}
-
+	
+     get_inode(fs,inode_num,&inodeBuffer);
+	
     if(blocks<12)
 	{
-       	inodeBuffer->block[blocks++]= used_blocks ;
-		   printf("if\n");
+       	inodeBuffer.block[blocks++]= used_blocks ;
+		
 	}
 
 	else if(blocks < 12+256)
-	{
-	
+	{ 
+    	int blocknumber = inodeBuffer.block[12];
+	  	printf("%d \n",used_blocks);
+       data_read(fs,groupNum,blocknumber,sector2);
+		int *a = (int *)sector2 ;
+		a[blocks-12]=used_blocks ;
+		 data_write(fs,groupNum,blocknumber,sector2);   
+		blocks ++ ;
 
-    	int blocknumber = inodeBuffer->block[12];
-        int * a= blocknumber ;
-		a[blocks-12] = used_blocks;
-        blocks++;
 	}
 	else if(blocks< 12+256+256*256)
 	{
-		int blockNumber = inodeBuffer->block[13];
-		int * a = blockNumber;
-		int *b = a[(blocks-268)/256]; 
-        b[(blocks-268)%256] = used_blocks;
-        blocks++;
+		int blocknumber1 = inodeBuffer.block[13];
+		data_read(fs,groupNum,blocknumber1,sector2);
+		int * a = (int *)sector2 ;
+		int blocknumber2 = a[(blocks-268)/256];
+		data_read(fs, groupNum, blocknumber2, sector2);
+		a[(blocks-268)%256] = used_blocks;
+		data_write(fs, groupNum, blocknumber2, sector2);
+		blocks++;
+		
 
 	}
-	inodeBuffer->blocks = blocks;
-   printf(" aaa %d\n",used_blocks);
+	
+	inodeBuffer.blocks = blocks;
+	fs->disk->read_sector(fs->disk, 1+groupNum*fs->sb.block_per_group+2, sector);   // 블록 비트맵 수정 
 	write_bitmap( used_blocks,1,sector);
    	fs->disk->write_sector(fs->disk, 1+groupNum*fs->sb.block_per_group+2, sector);   // 블록 비트맵 수정 
-
-    set_inode_onto_inode_table(fs,inode_num,inodeBuffer);
+    set_inode_onto_inode_table(fs,inode_num,&inodeBuffer);
    return EXT2_SUCCESS ;
         
 
@@ -1112,7 +1164,7 @@ int ext2_create(EXT2_NODE* parent, char* entryName, EXT2_NODE* retEntry)
 	
 	// inode bitmap
 	parent->fs->disk->read_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
-	write_bitmap(retEntry->entry.inode-1, 1, sector);
+	write_bitmap_inode(retEntry->entry.inode-1, 1, sector);
 	parent->fs->disk->write_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
 
 	// inode
@@ -1442,6 +1494,28 @@ char* my_strncpy(char* dest, const char* src, int length)
 }
 int write_bitmap(int number, int set, BYTE * sector)// 아이노드 비트맵을 쓸때는 number에다가 1빼주자 
 {
+
+    int offset = number / 8 ;
+	int offset2 = number %8 ;
+
+ 	if(set==0)
+  	{  
+	   sector[offset] &= (~(0x01<<(offset2)));
+	   return EXT2_SUCCESS;
+   	}
+   	else if(set==1)
+	{      
+		sector[offset] |= (0x01<<(offset2));
+	 	return EXT2_SUCCESS;
+	}
+  	else
+  	{
+		return EXT2_ERROR ;
+  	}
+
+}
+int write_bitmap_inode(int number, int set, BYTE * sector)// 아이노드 비트맵을 쓸때는 number에다가 1빼주자 
+{
 	if(number >= 100)
 	{
 		number -= 100;
@@ -1546,7 +1620,7 @@ int ext2_mkdir(const EXT2_NODE* parent, const char* entryName, EXT2_NODE* retEnt
 	parent->fs->disk->write_sector(parent->fs->disk,1+sector_num_per_group*group+2,sector);
 	ZeroMemory(sector,sizeof(sector));
 	parent->fs->disk->read_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
-	write_bitmap(retEntry->entry.inode-1, 1, sector);
+	write_bitmap_inode(retEntry->entry.inode-1, 1, sector);
 	parent->fs->disk->write_sector(parent->fs->disk,1+group*parent->fs->sb.block_per_group+3, sector);
 
 
@@ -1616,7 +1690,7 @@ int ext2_rmdir(EXT2_NODE* dir)
 	// inode bitmap
 	ZeroMemory(sector,sizeof(sector));
 	dir->fs->disk->read_sector(dir->fs->disk, 1 + (dir->fs->sb.block_per_group*group) + 3, sector);
-	write_bitmap(dir->entry.inode-1, 0, sector);
+	write_bitmap_inode(dir->entry.inode-1, 0, sector);
 	dir->fs->disk->write_sector(dir->fs->disk,1 + (group*dir->fs->sb.block_per_group) + 3, sector);
 	printf("inode bitmap inode : %d\n", dir->entry.inode);
 
