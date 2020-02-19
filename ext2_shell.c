@@ -129,7 +129,7 @@ int fs_format(DISK_OPERATIONS* disk, void* param)
 static SHELL_FILE_OPERATIONS g_file =
 {
 	fs_create,
-	NULL,
+	fs_remove,
 	fs_read,
 	fs_write
 };
@@ -144,6 +144,19 @@ static SHELL_FS_OPERATIONS   g_fsOprs =
 	&g_file,
 	NULL
 };
+
+int fs_remove (DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENTRY* current, const char* name)
+{
+	EXT2_NODE      EXT2_Current;
+	EXT2_NODE      entry;
+
+	shell_entry_to_ext2_entry(current, &EXT2_Current);
+
+	// 해당 name이 있는지 찾고, entry에 찾은 entry채워줌
+	ext2_lookup(&EXT2_Current, name, &entry);
+
+	return ext2_remove(&entry);
+}
 
 //.rmdir(&g_disk, &g_fsOprs, &g_currentDir, argv[1]);
 int fs_rmdir(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, SHELL_ENTRY* current, const char* name)
@@ -200,7 +213,7 @@ void fs_umount(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs)
 	return;
 }
 
-static SHELL_FILESYSTEM g_fat =
+static SHELL_FILESYSTEM g_ext2 =
 {
 	"EXT2",
 	fs_mount,
@@ -231,7 +244,7 @@ int fs_write(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENT
 
 void shell_register_filesystem(SHELL_FILESYSTEM* fs)
 {
-	*fs = g_fat;
+	*fs = g_ext2;
 }
 
 int	fs_create(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_ENTRY* parent, const char* name, SHELL_ENTRY* retEntry)
@@ -249,11 +262,11 @@ int	fs_create(DISK_OPERATIONS* disk, SHELL_FS_OPERATIONS* fsOprs, const SHELL_EN
 	return result;
 }
 
-int shell_entry_to_ext2_entry(const SHELL_ENTRY* shell_entry, EXT2_NODE* fat_entry)
+int shell_entry_to_ext2_entry(const SHELL_ENTRY* shell_entry, EXT2_NODE* ext2_entry)
 {
 	EXT2_NODE* entry = (EXT2_NODE*)shell_entry->pdata;
 
-	*fat_entry = *entry;
+	*ext2_entry = *entry;
 
 	return EXT2_SUCCESS;
 }
