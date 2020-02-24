@@ -25,17 +25,20 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 		return EXT2_ERROR;
 	}
 	if(node.blocks ==0)
-	{expand_block(file->fs,file->entry.inode);   // 블록 하나 늘려주고 
-	file->fs->sb.free_block_count --;
-	file->fs->gd.free_blocks_count --;
-	write_super_block(&file->fs->sb, file->fs->disk);
-	write_group_descriptor(file->fs->disk, &file->fs->gd, file->entry.inode/file->fs->sb.inode_per_group);
-	get_inode(file->fs, file->entry.inode, &node);  
+	{
+		expand_block(file->fs,file->entry.inode);   // 블록 하나 늘려주고 
+		file->fs->sb.free_block_count --;
+		file->fs->gd.free_blocks_count --;
+		write_super_block(&file->fs->sb, file->fs->disk);
+		write_group_descriptor(file->fs->disk, &file->fs->gd, file->entry.inode/file->fs->sb.inode_per_group);
+		get_inode(file->fs, file->entry.inode, &node);  
 	}  // 해당 아이노드를 구하고 
+
 	currentBlock = node.block[0];     // 현재 블록 초기화 
 	readEnd = offset + length;
 	currentOffset = offset;
     blockSize = node.blocks * MAX_BLOCK_SIZE ;  // 현재 해당 아이노드가 가지고 있는 블록 크기 초기화 해줌 
+
 	i =0;
 	while(offset>blockSize-1)   // 만약 offset이 아이노드가 가지고 있는 블록 크기를 넘어선다면 
 	{
@@ -45,6 +48,7 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 		 ++ blockSeq ;
 		 i++ ;
 	}
+
 	file->fs->sb.free_block_count -= i; 
 	file->fs->gd.free_blocks_count -= i;
 	write_super_block(&file->fs->sb, file->fs->disk);
@@ -53,10 +57,10 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 	get_inode(file->fs,file->entry.inode,&node); // 다시 초기화 시켜준다 
     dataBlocks = get_data_block_at_inode(file->fs,&node);
 	currentBlock= dataBlocks[i];  // 해당 블록 받아온다 
+
 	while (currentOffset < readEnd)       // 계속 쓰는 작업 
 	{
 		DWORD	copyLength;
-
 
 		blockNumber = currentOffset / MAX_BLOCK_SIZE;    // 해당 아이노드 블록 넘버 
 		if (blockSeq != blockNumber)   // 다음 블록을 쓸경우 
@@ -76,7 +80,7 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 				nextBlock =dataBlocks[i];
 			}
 			else 
-			nextBlock = dataBlocks[i];
+				nextBlock = dataBlocks[i];
 
 
 			currentBlock = nextBlock;
@@ -91,9 +95,7 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 				break;
 		}
 
-		memcpy(&sector[sectorOffset],
-			buffer,
-			copyLength);
+		memcpy(&sector[sectorOffset], buffer, copyLength);
 		if (data_write(file->fs, file->location.group, currentBlock, sector))
 			break;
 
@@ -105,7 +107,8 @@ int ext2_write(EXT2_NODE* file, unsigned long offset, unsigned long length, cons
 
 	node.size = MAX(currentOffset, node.size);
 	set_inode_onto_inode_table(file->fs, file->entry.inode, &node);
-  return currentOffset - offset ; // 얼마나 읽었는지 알려준다 
+  
+  	return currentOffset - offset ; // 얼마나 읽었는지 알려준다 
 }
 int ext2_read(EXT2_NODE * file, unsigned long offset , unsigned long length , const char * buffer)
 {   
